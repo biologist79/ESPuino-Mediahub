@@ -3,6 +3,10 @@
 Lightweight, **locally** run hub for centrally managing the RFID
 assignments of multiple [ESPuinos](https://github.com/biologist79/ESPuino). Concept & details: [docs/mediahub-konzept.md](docs/mediahub-konzept.md).
 
+## A picture first
+
+![Overview](docs/Mediahub_overview.png "Mediahub")
+
 ## Quick start
 
 The container runs as `www-data` (uid/gid `33:33`) rather than root, so
