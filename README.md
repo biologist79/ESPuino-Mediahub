@@ -1,7 +1,7 @@
 # ESPuino MediaHub
 
 Lightweight, **locally** run hub for centrally managing the RFID
-assignments of multiple ESPuinos. Concept & details: [docs/mediahub-konzept.md](docs/mediahub-konzept.md).
+assignments of multiple [ESPuinos](https://github.com/biologist79/ESPuino). Concept & details: [docs/mediahub-konzept.md](docs/mediahub-konzept.md).
 
 ## Quick start
 
@@ -26,6 +26,7 @@ either `chmod -R o+rX /path/to/your/library` or point `user:` in
 `docker-compose.yml` at the uid/gid that already owns your library instead.
 
 Then open [http://localhost:8080](http://localhost:8080).
+Hint: Adjust localhost and port according to your needs.
 
 For local development without Docker:
 
