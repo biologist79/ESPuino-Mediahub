@@ -20,6 +20,7 @@ from flask import (
     url_for,
 )
 from flask_babel import Babel, get_locale, gettext as _, ngettext
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import manifest as manifest_lib
@@ -33,6 +34,13 @@ LANGUAGES = ["de", "en", "fr"]
 
 app = Flask(__name__)
 app.config["BABEL_DEFAULT_LOCALE"] = "de"
+# gunicorn itself only ever speaks plain HTTP (see Dockerfile) — https only
+# reaches the ESP32 at all via a reverse proxy terminating TLS in front of
+# this container. Without ProxyFix, Flask builds url_for(_external=True)
+# URLs (filesBaseUrl in the manifest) from the proxy's internal plain-HTTP
+# request and silently downgrades them to http://, even though the ESPuino
+# reached the manifest endpoint itself over https.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 store = store_lib.Store(DATA_DIR)
 
 
