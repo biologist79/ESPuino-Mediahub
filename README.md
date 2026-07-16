@@ -1,7 +1,7 @@
 # ESPuino MediaHub
 
 Lightweight, **locally** run hub for centrally managing the RFID
-assignments of multiple ESPuinos. Concept & details: [../mediahub-konzept.md](../mediahub-konzept.md).
+assignments of multiple ESPuinos. Concept & details: [docs/mediahub-konzept.md](docs/mediahub-konzept.md).
 
 ## Quick start
 
