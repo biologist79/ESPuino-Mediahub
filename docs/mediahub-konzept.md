@@ -1,6 +1,6 @@
-# MediaHub — Detailspezifikation (Entwurf 1)
+# MediaHub — Detailspezifikation
 
-*Stand: 15. Juli 2026 · Branch `feature-mediahub` · Status: Hub-Server (`mediahub/`) implementiert und getestet; ESPuino-Firmware-Seite noch offen (§15)*
+*Stand: 16. Juli 2026 · Branch `feature-mediahub` · Status: Hub-Server (`mediahub/`) implementiert und getestet; ESPuino-Firmware-Seite noch offen (§15)*
 
 ## 1. Worum es geht
 
