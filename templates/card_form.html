@@ -21,12 +21,16 @@
 		<span class="form-label">{{ _('Content type') }}</span>
 		<div class="radio-group">
 			<label class="radio-option">
-				<input type="radio" name="kind" value="files" {{ "checked" if card.kind != "webradio" }} onchange="mhToggleKind()">
+				<input type="radio" name="kind" value="files" {{ "checked" if card.kind not in ("webradio", "podcast") }} onchange="mhToggleKind()">
 				{{ _('Audio files') }}
 			</label>
 			<label class="radio-option">
 				<input type="radio" name="kind" value="webradio" {{ "checked" if card.kind == "webradio" }} onchange="mhToggleKind()">
 				{{ _('Webradio') }}
+			</label>
+			<label class="radio-option">
+				<input type="radio" name="kind" value="podcast" {{ "checked" if card.kind == "podcast" }} onchange="mhToggleKind()">
+				{{ _('Podcast') }}
 			</label>
 		</div>
 	</div>
@@ -78,6 +82,84 @@
 		</div>
 	</div>
 
+	<div id="mh-podcast-section" class="form-section">
+		<div class="form-row" id="podcast-rss-row">
+			<label for="podcast-feed-url">{{ _('Feed URL') }}</label>
+			<div class="podcast-search">
+				<input type="url" id="podcast-feed-url" placeholder="https://example.com/feed.xml" autocomplete="off">
+				<button class="btn btn-secondary" type="button" id="podcast-feed-btn">{{ _('Load feed') }}</button>
+			</div>
+			<p class="muted">
+				{{ _('Any podcast feed works — the address a podcast app would subscribe to. MediaHub downloads the chosen episodes itself, so the ESPuino plays them from its SD card like any other assignment — offline included.') }}
+			</p>
+			<div id="podcast-feed-status" class="podcast-box" hidden></div>
+		</div>
+
+		<div class="form-row" id="podcast-show-row" hidden>
+			<span class="form-label">{{ _('Selected podcast') }}</span>
+			<div id="podcast-show" class="podcast-show"></div>
+		</div>
+
+		<div class="form-row" id="podcast-selection-row" hidden>
+			<span class="form-label">{{ _('Which episodes?') }}</span>
+			<div class="radio-group radio-group-stacked">
+				<label class="radio-option">
+					<input type="radio" name="podcast_selection" value="latest" id="podcast-selection-latest">
+					<span>
+						<strong>{{ _('Always the newest') }}</strong> —
+						{{ _('the hub re-checks the feed and fetches new episodes on its own; the card plays the new one from the next tap onwards.') }}
+					</span>
+				</label>
+				<div class="podcast-count" id="podcast-count-row">
+					<label for="podcast-count">{{ _('How many of the newest episodes?') }}</label>
+					<input type="number" id="podcast-count" min="1" max="{{ max_podcast_episodes }}" value="1">
+				</div>
+				<label class="radio-option">
+					<input type="radio" name="podcast_selection" value="episodes" id="podcast-selection-episodes">
+					<span>
+						<strong>{{ _('Specific episodes') }}</strong> —
+						{{ _('a fixed pick that never changes on its own.') }}
+					</span>
+				</label>
+			</div>
+			<p class="podcast-episode-note muted" id="podcast-episodes-note" hidden></p>
+			<div id="podcast-episodes" class="podcast-episodes" hidden></div>
+		</div>
+
+		<div class="form-row" id="podcast-play-mode-row" hidden>
+			<label for="podcast_play_mode">{{ _('Play mode') }}</label>
+			<select id="podcast_play_mode" name="podcast_play_mode">
+				{% for value, label in podcast_play_modes %}
+				<option value="{{ value }}"
+					{{ "selected" if (card.play_mode if card.kind == "podcast" else default_podcast_play_mode) == value }}>{{ _(label) }}</option>
+				{% endfor %}
+			</select>
+			<p class="muted">{{ _('Position-remembering modes are handy for long episodes. Note that with "always the newest" a remembered position carries over to the new episode.') }}</p>
+		</div>
+
+		<input type="hidden" name="podcast_json" id="podcast-json" value="">
+		<script type="application/json" id="podcast-config">
+			{{ {
+				"feedUrl": url_for('podcast_feed_preview'),
+				"maxEpisodes": max_podcast_episodes,
+				"singleFileModes": single_file_play_modes,
+				"initial": (card.podcast if card.kind == "podcast" else None),
+				"labels": {
+					"episodeCount": _('%(num)s episodes', num='{num}'),
+					"latestEpisode": _('latest episode: %(date)s', date='{date}'),
+					"change": _('Choose a different podcast'),
+					"noEpisodes": _('This feed currently has no playable episodes.'),
+					"previewNote": _('The feed as it is right now — when a new episode appears, the list moves up. Click one to play just that episode instead.'),
+					"pickNote": _('Pick the episodes this card plays.'),
+					"loadingFeed": _('Loading feed…'),
+					"feedFailed": _('Could not read this feed.'),
+					"singleEpisodeOnly": _('This play mode only supports a single episode.'),
+					"newest": _('newest')
+				}
+			} | tojson }}
+		</script>
+	</div>
+
 	{% if target_choices %}
 	<div class="form-row">
 		<span class="form-label">{{ _('Write to these ESPuinos') }}</span>
@@ -109,11 +191,18 @@
 {% block scripts %}
 <script>
 	function mhToggleKind() {
-		var isWebradio = document.querySelector('input[name="kind"]:checked').value === "webradio";
-		document.getElementById("mh-files-section").style.display = isWebradio ? "none" : "block";
-		document.getElementById("mh-webradio-section").style.display = isWebradio ? "block" : "none";
+		var kind = document.querySelector('input[name="kind"]:checked').value;
+		var sections = {
+			files: "mh-files-section",
+			webradio: "mh-webradio-section",
+			podcast: "mh-podcast-section"
+		};
+		Object.keys(sections).forEach(function (name) {
+			document.getElementById(sections[name]).style.display = kind === name ? "block" : "none";
+		});
 	}
 	mhToggleKind();
 </script>
 <script src="{{ url_for('static', filename='js/media-browser.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/podcast-picker.js') }}" defer></script>
 {% endblock %}

@@ -81,7 +81,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{% for card, content_label, content_detail, device_label in cards %}
+				{% for card, content_label, content_detail, device_label, podcast_state in cards %}
 				{% set row_key = card.esp_id ~ "/" ~ card.card_id %}
 				<tr>
 					<td><code>{{ card.card_id }}</code></td>
@@ -94,10 +94,13 @@
 							<span class="badge badge-attention">{{ _('pending') }}</span>
 						{% endif %}
 					</td>
-					<td>
-						{{ content_label }}
+					<td data-podcast-cell="{{ row_key if card.kind == 'podcast' }}">
+						<span class="mh-content-label">{{ content_label }}</span>
 						{% if content_detail %}
 						<span class="content-detail" title="{{ content_detail }}">{{ content_detail }}</span>
+						{% endif %}
+						{% if podcast_state %}
+						<span class="podcast-sync podcast-sync-{{ podcast_state[0] }}">{{ podcast_state[1] }}</span>
 						{% endif %}
 					</td>
 					<td>{{ card.last_seen | shortdt }}</td>
@@ -109,6 +112,12 @@
 						<form method="post" action="{{ url_for('force_refresh_card', esp_id=card.esp_id, card_id=card.card_id) }}">
 							<button class="btn btn-small btn-secondary" type="submit">{{ _('Force refresh') }}</button>
 						</form>
+						{% if card.kind == "podcast" %}
+						<form method="post" action="{{ url_for('podcast_refresh_card', esp_id=card.esp_id, card_id=card.card_id) }}">
+							<button class="btn btn-small btn-secondary" type="submit"
+								title="{{ _('Check the feed for new episodes right now instead of waiting for the next scheduled check.') }}">{{ _('Check episodes') }}</button>
+						</form>
+						{% endif %}
 						<button type="button" class="btn btn-small btn-secondary mh-manifest-btn"
 							data-key="{{ row_key }}" data-url="{{ url_for('manifest_preview', esp_id=card.esp_id, card_id=card.card_id) }}"
 							data-error="{{ _('Could not load the manifest.') }}">{{ _('Manifest') }}</button>
@@ -118,7 +127,12 @@
 							data-desc="{{ _('Copy card %(id)s\'s configuration to:', id=card.card_id) }}"
 							data-no-other-device="{{ _('No other known ESPuino to duplicate to yet.') }}">{{ _('Duplicate') }}</button>
 						{% endif %}
-						<form method="post" action="{{ url_for('delete_card', esp_id=card.esp_id, card_id=card.card_id) }}" onsubmit="return confirm('{{ _('Really delete card %(id)s?', id=card.card_id) }}');">
+						{% set delete_confirm = _('Really delete card %(id)s?', id=card.card_id) %}
+						{% if card.kind == "podcast" and delete_mode == "lazy" %}
+							{% set delete_confirm = delete_confirm ~ "\n\n" ~ _('The downloaded episodes are removed from the hub. The copy already on the ESPuino stays there until the card is deleted on the device too — switch to "secure delete" in Settings to have MediaHub do that for you.') %}
+						{% endif %}
+						<form class="confirm-form" method="post" data-confirm="{{ delete_confirm }}"
+							action="{{ url_for('delete_card', esp_id=card.esp_id, card_id=card.card_id) }}">
 							<button class="btn btn-small btn-danger" type="submit">{{ _('Delete') }}</button>
 						</form>
 					</td>
@@ -156,4 +170,8 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/manifest-preview.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/duplicate-card.js') }}" defer></script>
+<script id="podcast-status-config" type="application/json">
+	{{ {"statusUrl": url_for('podcast_status')} | tojson }}
+</script>
+<script src="{{ url_for('static', filename='js/podcast-status.js') }}" defer></script>
 {% endblock %}

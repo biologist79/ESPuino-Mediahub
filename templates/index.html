@@ -17,7 +17,7 @@
 	<a class="card" href="{{ url_for('cards') }}">
 		<div class="card-icon">🏷️</div>
 		<h2>{{ _('Cards & Assignments') }}</h2>
-		<p>{{ _('Define which RFID card plays which content and play mode.') }}</p>
+		<p>{{ _('Define which RFID card plays which content and play mode: library files, webradio or podcasts.') }}</p>
 		<span class="badge">{{ _('%(num)s assigned', num=assigned_count) }}</span>
 	</a>
 
@@ -31,14 +31,14 @@
 	<a class="card" href="{{ url_for('media_overview') }}">
 		<div class="card-icon">📁</div>
 		<h2>{{ _('Media') }}</h2>
-		<p>{{ _('Storage usage per card; uploads happen right in the assignment form.') }}</p>
+		<p>{{ _('Storage usage per card — what each ESPuino has to download and keep.') }}</p>
 		<span class="badge">{{ (total_bytes / 1048576) | round(1) }}&nbsp;MB</span>
 	</a>
 
 	<a class="card" href="{{ url_for('settings') }}">
 		<div class="card-icon">⚙️</div>
 		<h2>{{ _('Settings') }}</h2>
-		<p>{{ _('Delete behavior (lazy/secure) and other options.') }}</p>
+		<p>{{ _('Delete behavior (lazy/secure), recursion depth, podcast checks and cache.') }}</p>
 	</a>
 </div>
 {% endblock %}
