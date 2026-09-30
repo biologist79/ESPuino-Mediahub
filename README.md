@@ -84,6 +84,16 @@ pybabel compile -d translations                  # only needed for local testing
 
 The `.mo` files are compiled automatically at Docker build time (see Dockerfile) and are not committed.
 
+## Contributing
+
+Pull requests are welcome from anyone, and nothing needs to be enabled for that. One thing does trip
+people up: the branch cannot live in this repository, since only collaborators may push here —
+trying it fails with `Validation failed: must be a collaborator`. Work in a fork and the message
+goes away.
+
+If your change touches any `_()` / `ngettext()` string, please update the catalogs as well
+(see [Maintaining translations](#maintaining-translations)).
+
 ## Status
 
 Functional hub with device/card management, per-card manifests
