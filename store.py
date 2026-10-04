@@ -8,6 +8,9 @@ atomically (tmp file + rename), mirroring the download pattern used on the
 ESPuino itself (concept §13). The cross-process lock matters because the
 container runs several gunicorn workers: without it, a read-modify-write in
 one of them could silently drop a change another made in the meantime.
+A mutation that leaves the data unchanged writes nothing at all — the legacy
+migration runs in every worker on every boot, and re-saving Settings posts
+values that already stand there.
 
 Cards are keyed by (esp_id, card_id), not card_id alone — the same
 physical card can be enrolled on several ESPuinos (that's the point of
@@ -87,13 +90,26 @@ class Store:
         with open(self.db_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    def _write(self, data):
+    def _read_raw(self):
+        """The database plus the exact text it came from — `_mutate` compares
+        against that text to decide whether anything actually changed."""
+        with open(self.db_path, "r", encoding="utf-8") as f:
+            text = f.read()
+        return text, json.loads(text)
+
+    def _serialize(self, data):
+        return json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False)
+
+    def _write_text(self, text):
         # Process-unique temp name, so two writers can never rename each
         # other's file out from under themselves (see _ensure_db).
         tmp_path = f"{self.db_path}.{os.getpid()}.tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
+            f.write(text)
         os.replace(tmp_path, self.db_path)
+
+    def _write(self, data):
+        self._write_text(self._serialize(data))
 
     def _mutate(self, fn):
         """Read, let fn mutate the data in place, write back atomically.
@@ -105,9 +121,15 @@ class Store:
         with _lock, open(self.lock_path, "a+b") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             try:
-                data = self._read()
+                before, data = self._read_raw()
                 result = fn(data)
-                self._write(data)
+                # Mutations that change nothing are routine: every worker runs
+                # the legacy migration on boot, and saving Settings posts values
+                # that already stand there. Rewriting the whole database for
+                # that is wasted I/O — and one more window to be interrupted in.
+                after = self._serialize(data)
+                if after != before:
+                    self._write_text(after)
             finally:
                 fcntl.flock(handle, fcntl.LOCK_UN)
             return result
