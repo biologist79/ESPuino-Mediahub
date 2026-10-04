@@ -6,6 +6,7 @@ See ../mediahub-konzept.md for the full specification.
 
 import json
 import os
+import re
 
 from flask import (
     Flask,
@@ -25,6 +26,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import manifest as manifest_lib
 import media_library
+import podcast_cache
+import podcast_feed
+import podcast_sync
 import store as store_lib
 from espuino_client import delete_rfid_on_device
 
@@ -42,6 +46,11 @@ app.config["BABEL_DEFAULT_LOCALE"] = "de"
 # reached the manifest endpoint itself over https.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 store = store_lib.Store(DATA_DIR)
+
+# Resolving and downloading podcast episodes happens off the request path
+# entirely (concept §7.3) — one elected worker per container does it, no
+# matter how many gunicorn workers there are (see podcast_sync).
+podcast_worker = podcast_sync.start(store, DATA_DIR)
 
 
 def _secret_key():
@@ -97,7 +106,18 @@ def set_language(lang_code):
 # entirely, revised to make it optional since the hub may be reachable
 # beyond a single trusted household).
 # --------------------------------------------------------------------------
-PUBLIC_ENDPOINTS = {"login", "set_language", "health", "card_manifest", "serve_media", "static"}
+PUBLIC_ENDPOINTS = {
+    "login",
+    "set_language",
+    "health",
+    "card_manifest",
+    "serve_media",
+    # A podcast card's episodes are fetched by the ESPuino exactly like
+    # library files are, so this endpoint has to stay open for the same
+    # reason (§5.4: devices can't log in).
+    "serve_podcast_media",
+    "static",
+}
 
 
 @app.before_request
@@ -143,7 +163,10 @@ def index():
     pending_count = sum(1 for c in cards.values() if c["status"] == "pending")
     assigned_count = sum(1 for c in cards.values() if c["status"] == "assigned")
     total_bytes = sum(
-        f["size"] for c in cards.values() if c["kind"] == "files" for f in c.get("files", [])
+        f["size"]
+        for c in cards.values()
+        if c["kind"] in ("files", "podcast")
+        for f in c.get("files", [])
     )
     device_label = ngettext("%(num)s device", "%(num)s devices", len(devices)) % {"num": len(devices)}
     return render_template(
@@ -203,6 +226,9 @@ def delete_device(esp_id):
         abort(404)
     n = store.delete_device(esp_id)
     if n:
+        # The cascade may have removed the last card referencing a cached
+        # podcast episode.
+        podcast_sync.prune_cache(store, DATA_DIR)
         flash(_("Device %(esp_id)s and its %(num)s card assignment(s) deleted (locally in MediaHub only).", esp_id=esp_id, num=n), "success")
     else:
         flash(_("Device %(esp_id)s deleted.", esp_id=esp_id), "success")
@@ -217,11 +243,70 @@ def _content_label(card):
         return "📻 " + _("Webradio")
     files = card.get("files", [])
     n = len(files)
-    label = "📁 " + ngettext("%(num)s file", "%(num)s files", n) % {"num": n}
+    if card["kind"] == "podcast":
+        label = "🎙️ " + ngettext("%(num)s episode", "%(num)s episodes", n) % {"num": n}
+    else:
+        label = "📁 " + ngettext("%(num)s file", "%(num)s files", n) % {"num": n}
     if n:
         size_mb = round(sum(f["size"] for f in files) / 1048576, 1)
         label += f" ({size_mb} MB)"
     return label
+
+
+def _podcast_detail(card):
+    """"<show> · newest episode" resp. the episode titles actually synced —
+    what a podcast card shows in the Content column."""
+    podcast = card.get("podcast") or {}
+    show = podcast.get("show_title") or _("Podcast")
+    if podcast.get("selection") == "latest":
+        count = podcast.get("episode_count") or 1
+        which = ngettext("newest episode", "%(num)s newest episodes", count) % {"num": count}
+    else:
+        episodes = podcast.get("episodes") or []
+        which = ", ".join(e.get("title") or e["id"] for e in episodes)
+    return f"{show} · {which}" if which else show
+
+
+def _podcast_status(card):
+    """Sync state of a podcast card, ready to render: (state, text)."""
+    state = podcast_sync.sync_state(card)
+    kind = state["state"]
+    if kind == podcast_sync.STATE_READY:
+        return (kind, _("up to date"))
+    if kind == podcast_sync.STATE_SYNCING:
+        if state["total"]:
+            return (
+                kind,
+                _(
+                    "downloading %(done)s/%(total)s",
+                    done=state["done"],
+                    total=state["total"],
+                ),
+            )
+        return (kind, _("checking the feed…"))
+    if kind == podcast_sync.STATE_ERROR:
+        # Storage refusals are the errors an admin can actually act on, so
+        # they get a translated sentence built here rather than the English
+        # one the background worker had to log without a request locale.
+        if state["reason"] == "cache_full":
+            return (
+                kind,
+                _(
+                    "Cache limit of %(limit)s MB reached — no new episodes are "
+                    "downloaded. Raise it in Settings or keep fewer episodes.",
+                    limit=store.get_settings().get("podcast_cache_limit_mb"),
+                ),
+            )
+        if state["reason"] == "disk_full":
+            return (
+                kind,
+                _(
+                    "Not enough free disk space on the hub — MediaHub stopped "
+                    "before filling it up."
+                ),
+            )
+        return (kind, state["message"] or _("sync failed"))
+    return (kind, _("waiting for download"))
 
 
 def _content_detail(card):
@@ -230,6 +315,8 @@ def _content_detail(card):
     resort. Shown truncated in the table with this as the hover tooltip."""
     if card["kind"] == "webradio":
         return card.get("stream_url") or ""
+    if card["kind"] == "podcast":
+        return _podcast_detail(card)
     files = card.get("files", [])
     if not files:
         return ""
@@ -322,6 +409,7 @@ def cards():
             _content_label(c),
             _content_detail(c),
             devices_by_id.get(c["esp_id"], {}).get("alias") or c["esp_id"],
+            _podcast_status(c) if c["kind"] == "podcast" else None,
         )
         for c in cards_by_key.values()
         if (not only_pending or c["status"] == "pending")
@@ -331,6 +419,10 @@ def cards():
     return render_template(
         "cards.html",
         cards=rows,
+        # A lazy delete leaves the downloaded episodes on the ESPuino's SD
+        # card; for a podcast card that is worth saying out loud at the
+        # moment of deletion, not just in the docs.
+        delete_mode=store.get_settings()["delete_mode"],
         only_pending=only_pending,
         devices=devices_by_id,
         esp_id_filter=esp_id_filter,
@@ -382,17 +474,116 @@ def duplicate_card(esp_id, card_id):
         )
         return redirect(url_for("assign_card", esp_id=target_esp_id, card_id=card_id))
 
-    store.save_assignment(
-        target_esp_id,
-        card_id,
-        source["name"],
-        source["kind"],
-        source["play_mode"],
-        source["stream_url"],
-        source["files"],
-    )
+    if source["kind"] == "podcast":
+        # Copy the *intent*, not the resolved file list: the duplicate re-syncs
+        # on its own (hitting the same shared episode cache, so it usually
+        # needs no download at all).
+        store.save_podcast_assignment(
+            target_esp_id, card_id, source["name"], source["play_mode"], source.get("podcast") or {}
+        )
+        podcast_worker.nudge()
+    else:
+        store.save_assignment(
+            target_esp_id,
+            card_id,
+            source["name"],
+            source["kind"],
+            source["play_mode"],
+            source["stream_url"],
+            source["files"],
+        )
     flash(_("Card %(id)s duplicated to %(esp_id)s.", id=card_id, esp_id=target_esp_id), "success")
     return redirect(url_for("cards"))
+
+
+_RSS_EPISODE_ID = re.compile(r"^rss-[0-9a-f]{16}$")
+
+
+def _is_valid_episode_id(episode_id):
+    """Feed episode ids are the hash podcast_feed derives from a GUID."""
+    return bool(_RSS_EPISODE_ID.match(episode_id))
+
+
+def _parse_podcast_form(form):
+    """Validates the podcast picker's hidden JSON field.
+
+    Returns `(podcast, None)` — the intent to store, with the play mode
+    included under "play_mode" — or `(None, message)`.
+    """
+    try:
+        raw = json.loads(form.get("podcast_json") or "{}")
+    except ValueError:
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+
+    feed_url = str(raw.get("feed_url") or "").strip()
+    if not feed_url.startswith(("http://", "https://")):
+        return (None, _("Please load a podcast feed first."))
+
+    selection = raw.get("selection")
+    if selection not in ("latest", "episodes"):
+        selection = "latest"
+
+    episodes = []
+    if selection == "episodes":
+        for entry in raw.get("episodes") or []:
+            # The payload is JSON from a hidden form field, so nothing about
+            # its shape is guaranteed — a wrong type here has to come back as
+            # "please pick an episode", not as a 500.
+            if not isinstance(entry, dict):
+                continue
+            episode_id = str(entry.get("id") or "").strip()
+            if not _is_valid_episode_id(episode_id):
+                continue
+            try:
+                duration = int(entry.get("duration") or 0)
+            except (TypeError, ValueError):
+                duration = 0
+            episodes.append(
+                {
+                    "id": episode_id,
+                    "title": str(entry.get("title") or "")[:300],
+                    "publish_date": str(entry.get("publish_date") or "")[:64] or None,
+                    "duration": duration,
+                }
+            )
+        episodes = episodes[: podcast_sync.MAX_EPISODES]
+        if not episodes:
+            return (None, _("Please select at least one episode."))
+
+    try:
+        episode_count = int(raw.get("episode_count") or 1)
+    except (TypeError, ValueError):
+        episode_count = 1
+    episode_count = max(1, min(episode_count, podcast_sync.MAX_EPISODES))
+
+    try:
+        play_mode = int(form.get("podcast_play_mode", ""))
+    except ValueError:
+        play_mode = -1
+    if not manifest_lib.is_valid_podcast_play_mode(play_mode):
+        return (None, _("Please choose a valid play mode."))
+
+    effective_count = episode_count if selection == "latest" else len(episodes)
+    if play_mode in manifest_lib.SINGLE_FILE_PLAY_MODES and effective_count > 1:
+        return (
+            None,
+            _("This play mode only supports a single episode — please select just one."),
+        )
+
+    return (
+        {
+            "feed_url": feed_url,
+            "show_title": str(raw.get("show_title") or "")[:300],
+            "show_image": str(raw.get("show_image") or "") or None,
+            "selection": selection,
+            "episode_count": episode_count,
+            "episodes": episodes,
+            "play_mode": play_mode,
+        },
+        None,
+    )
 
 
 @app.route("/cards/<esp_id>/<card_id>/assign", methods=["GET", "POST"])
@@ -418,6 +609,37 @@ def assign_card(esp_id, card_id):
                 flash(_("A stream URL is required for webradio."), "error")
                 return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
             payload = (name, "webradio", None, stream_url, [])
+        elif kind == "podcast":
+            podcast, error = _parse_podcast_form(request.form)
+            if error:
+                flash(error, "error")
+                return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
+            play_mode = podcast.pop("play_mode")
+            # One intent per device, like any other assignment. The episodes
+            # are cached once and shared (podcast_cache), so a second ESPuino
+            # costs the hub no second download.
+            targets = _assignment_targets(esp_id)
+            for target_esp_id in targets:
+                store.save_podcast_assignment(target_esp_id, card_id, name, play_mode, podcast)
+            # The episodes themselves are fetched in the background; the card
+            # only becomes playable once that finished (see the sync column
+            # in the card list).
+            podcast_worker.nudge()
+            if len(targets) == 1:
+                flash(
+                    _("Card %(id)s assigned — downloading the episodes now.", id=card_id),
+                    "success",
+                )
+            else:
+                flash(
+                    _(
+                        "Card %(id)s assigned on %(num)s ESPuinos — downloading the episodes now.",
+                        id=card_id,
+                        num=len(targets),
+                    ),
+                    "success",
+                )
+            return redirect(url_for("cards"))
         else:
             try:
                 play_mode = int(request.form.get("play_mode", ""))
@@ -487,7 +709,80 @@ def assign_card(esp_id, card_id):
         play_modes=manifest_lib.FILE_PLAY_MODES,
         single_file_play_modes=list(manifest_lib.SINGLE_FILE_PLAY_MODES),
         recursive_play_modes=list(manifest_lib.RECURSIVE_PLAY_MODES),
+        podcast_play_modes=manifest_lib.PODCAST_PLAY_MODES,
+        default_podcast_play_mode=manifest_lib.DEFAULT_PODCAST_PLAY_MODE,
+        max_podcast_episodes=podcast_sync.MAX_EPISODES,
     )
+
+
+# --------------------------------------------------------------------------
+# Web UI: podcasts (concept §7.3)
+#
+# The feed is fetched through the hub rather than from the browser: it keeps
+# the frontend CDN-free and offline-capable like the rest of the UI (no
+# third-party script, no CORS dance), lets one shared in-process cache serve
+# every admin, and means only the hub ever talks to the outside.
+# --------------------------------------------------------------------------
+@app.route("/podcast/feed")
+def podcast_feed_preview():
+    """Title and episodes of a podcast feed the admin pasted.
+
+    The URL comes from a form field — the hub is being asked to read a feed
+    of the admin's choosing. It is an authenticated action (the assignment UI
+    sits behind the optional hub password), the scheme is restricted to
+    HTTP(S) and the response is size-capped; beyond that the hub does not
+    second-guess which feed its own admin may subscribe to, since a
+    self-hosted feed on the same LAN is a perfectly ordinary thing to want.
+    """
+    feed_url = (request.args.get("url") or "").strip()
+    try:
+        feed = podcast_feed.fetch_feed(feed_url)
+    except podcast_feed.PodcastFeedError as exc:
+        return jsonify(error=str(exc)), 502
+    return jsonify(
+        feed_url=feed["feed_url"],
+        title=feed["title"],
+        description=feed["description"],
+        image_url=feed["image_url"],
+        total=len(feed["episodes"]),
+        episodes=feed["episodes"],
+    )
+
+
+@app.route("/podcast/status")
+def podcast_status():
+    """Sync state of every podcast card — polled by the card list so a
+    running download shows its progress without a page reload."""
+    states = {}
+    for card in store.list_cards().values():
+        if card["kind"] != "podcast":
+            continue
+        state, text = _podcast_status(card)
+        states[f"{card['esp_id']}/{card['card_id']}"] = {
+            "state": state,
+            "text": text,
+            "label": _content_label(card),
+        }
+    return jsonify(cards=states)
+
+
+@app.route("/cards/<esp_id>/<card_id>/podcast-refresh", methods=["POST"])
+def podcast_refresh_card(esp_id, card_id):
+    """"Check for new episodes now" — the manual counterpart to the
+    configurable refresh interval (Settings)."""
+    if store.mark_podcast_pending(esp_id, card_id) is None:
+        abort(404)
+    podcast_worker.nudge()
+    flash(_("Checking the feed for new episodes of card %(id)s.", id=card_id), "success")
+    return redirect(url_for("cards"))
+
+
+@app.route("/podcast-media/<path:filename>")
+def serve_podcast_media(filename):
+    """Serves a cached podcast episode to an ESPuino — the podcast-cache
+    counterpart of serve_media(), and the `filesBaseUrl` of a podcast card's
+    manifest."""
+    return send_from_directory(podcast_cache.cache_root(DATA_DIR), filename)
 
 
 @app.route("/cards/<esp_id>/<card_id>/force-refresh", methods=["POST"])
@@ -530,11 +825,22 @@ def delete_card(esp_id, card_id):
 
     # Only the assignment (NVS-equivalent entry) is removed — the underlying
     # files belong to the admin's own media library, not to MediaHub, and
-    # are never touched here.
+    # are never touched here. Cached podcast episodes are the one
+    # exception: those *are* hub-owned, so they get cleaned up once no card
+    # references them any more.
     store.delete_card(esp_id, card_id)
+    podcast_sync.prune_cache(store, DATA_DIR)
 
     flash(_("Card %(id)s deleted (%(mode)s).", id=card_id, mode=delete_mode), "success")
     return redirect(url_for("cards"))
+
+
+def _files_base_url(card):
+    """`filesBaseUrl` for a card: the media library for a normal assignment,
+    the hub's podcast cache for a podcast one. Both are a plain HTTP
+    prefix to the ESPuino — it never learns which is which (§7.3)."""
+    endpoint = "serve_podcast_media" if card["kind"] == "podcast" else "serve_media"
+    return url_for(endpoint, filename="", _external=True)
 
 
 @app.route("/cards/<esp_id>/<card_id>/manifest-preview")
@@ -545,8 +851,7 @@ def manifest_preview(esp_id, card_id):
     card = store.get_card(esp_id, card_id)
     if card is None or card["status"] != "assigned":
         abort(404)
-    files_base_url = url_for("serve_media", filename="", _external=True)
-    return jsonify(manifest_lib.build_manifest(card_id, card, files_base_url))
+    return jsonify(manifest_lib.build_manifest(card_id, card, _files_base_url(card)))
 
 
 # --------------------------------------------------------------------------
@@ -563,10 +868,43 @@ def media_overview():
             devices_by_id.get(c["esp_id"], {}).get("alias") or c["esp_id"],
         )
         for c in cards_by_key.values()
-        if c["kind"] == "files" and c.get("files")
+        if c["kind"] in ("files", "podcast") and c.get("files")
     ]
     rows.sort(key=lambda row: row[1], reverse=True)
     return render_template("media.html", rows=rows)
+
+
+def _podcast_cache_panel():
+    """What the Settings page shows next to the cache limit.
+
+    Deliberately more than a number: the cache is the only storage MediaHub
+    owns, it fills itself in the background, and it empties itself again —
+    so the admin setting the limit has to see both halves of that, otherwise
+    the only honest thing they could do is go and look in the data volume.
+    """
+    settings = store.get_settings()
+    state = store.get_podcast_cache_state()
+    used = podcast_cache.total_bytes(DATA_DIR)
+    limit_mb = settings.get("podcast_cache_limit_mb") or 0
+    limit = int(limit_mb) * 1048576
+
+    episodes = 0
+    for card in store.list_cards().values():
+        if card["kind"] == "podcast":
+            episodes += len(card.get("files", []))
+
+    return {
+        "used": used,
+        "limit": limit,
+        "percent": round(used * 100 / limit) if limit else 0,
+        "near_limit": bool(limit) and used * 100 / limit >= 90,
+        "free": podcast_cache.free_bytes(DATA_DIR),
+        "episode_slots": episodes,
+        "last_cleanup_at": state.get("last_cleanup_at"),
+        "last_removal_at": state.get("last_removal_at"),
+        "last_removed_files": state.get("last_removed_files") or 0,
+        "last_removed_bytes": state.get("last_removed_bytes") or 0,
+    }
 
 
 @app.route("/media/browse")
@@ -617,9 +955,34 @@ def settings():
             flash(_("Recursion depth must be between 0 and 20."), "error")
             return redirect(url_for("settings"))
 
+        try:
+            refresh_minutes = int(request.form.get("podcast_refresh_minutes", ""))
+        except ValueError:
+            refresh_minutes = -1
+        if 0 <= refresh_minutes <= 10080:
+            store.set_podcast_refresh_minutes(refresh_minutes)
+        else:
+            flash(
+                _("The episode check interval must be between 0 and 10080 minutes (one week)."),
+                "error",
+            )
+            return redirect(url_for("settings"))
+
+        try:
+            cache_limit = int(request.form.get("podcast_cache_limit_mb", ""))
+        except ValueError:
+            cache_limit = -1
+        if 0 <= cache_limit <= 1024 * 1024:
+            store.set_podcast_cache_limit_mb(cache_limit)
+        else:
+            flash(_("The cache limit must be between 0 and 1048576 MB."), "error")
+            return redirect(url_for("settings"))
+
         flash(_("Settings saved."), "success")
         return redirect(url_for("settings"))
-    return render_template("settings.html", settings=store.get_settings())
+    return render_template(
+        "settings.html", settings=store.get_settings(), cache=_podcast_cache_panel()
+    )
 
 
 @app.route("/settings/password", methods=["POST"])
@@ -661,8 +1024,15 @@ def card_manifest(esp_id, card_id):
     if card["status"] != "assigned":
         return jsonify(error="not_assigned", status="pending"), 404
 
-    files_base_url = url_for("serve_media", filename="", _external=True)
-    return jsonify(manifest_lib.build_manifest(card_id, card, files_base_url))
+    if card["kind"] == "podcast" and not card.get("files"):
+        # Assigned, but the hub hasn't finished fetching the episode yet
+        # (§7.3). Answering "not ready" rather than an empty file list keeps
+        # the ESPuino from caching a manifest with nothing to play; it simply
+        # shows the same short error as for an unknown card and the admin
+        # taps again once the download completed.
+        return jsonify(error="not_ready", status="preparing"), 404
+
+    return jsonify(manifest_lib.build_manifest(card_id, card, _files_base_url(card)))
 
 
 @app.route("/media/<path:filename>")

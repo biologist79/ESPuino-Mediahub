@@ -5,7 +5,7 @@
 {% block content %}
 <section class="page-head">
 	<h1>{{ _('Settings') }}</h1>
-	<p class="muted">{{ _('Configure how the hub behaves when a card assignment is deleted, how deep it looks into subfolders for recursive play modes, and which devices a new assignment is pre-selected for.') }}</p>
+	<p class="muted">{{ _('Configure how the hub behaves when a card assignment is deleted, how deep it looks into subfolders for recursive play modes, which devices a new assignment is pre-selected for, and how it keeps podcasts up to date.') }}</p>
 </section>
 
 <form class="form-card" method="post">
@@ -53,6 +53,53 @@
 					{{ _('every device is pre-ticked in the assignment form, so a single save covers the whole household. Useful if your cards are meant to work on every box; untick the ones you want to leave out.') }}
 				</span>
 			</label>
+		</div>
+	</div>
+
+	<div class="form-row">
+		<label for="podcast_refresh_minutes">{{ _('Podcasts: check for new episodes every') }}</label>
+		<input type="number" id="podcast_refresh_minutes" name="podcast_refresh_minutes" min="0" max="10080" style="width: 100px"
+			value="{{ settings.podcast_refresh_minutes }}">
+		<p class="muted">{{ _('Minutes between two checks for cards set to "always the newest" (0 = never check automatically; "Check episodes" on the card list always works). A new episode is downloaded in the background and reaches the ESPuino on the next tap.') }}</p>
+	</div>
+
+	<div class="form-row">
+		<label for="podcast_cache_limit_mb">{{ _('Podcasts: cache limit') }}</label>
+		<input type="number" id="podcast_cache_limit_mb" name="podcast_cache_limit_mb" min="0" max="1048576" style="width: 120px"
+			value="{{ settings.podcast_cache_limit_mb }}">
+		<p class="muted">{{ _('Megabytes the downloaded episodes may occupy on the hub (0 = no limit). Reaching it stops new downloads; nothing already downloaded is deleted.') }}</p>
+
+		<div class="cache-panel">
+			<div class="cache-head">
+				<span class="cache-size{{ ' cache-size-warn' if cache.near_limit }}">
+					{{ (cache.used / 1048576) | round(1) }}&nbsp;MB
+					{% if cache.limit %}<span class="muted">{{ _('of %(limit)s MB', limit=(cache.limit / 1048576) | round(0) | int) }}</span>{% endif %}
+				</span>
+				<span class="muted">{{ _('%(num)s episodes cached', num=cache.episode_slots) }}</span>
+			</div>
+
+			{% if cache.limit %}
+			<div class="cache-bar" role="img"
+				aria-label="{{ _('%(percent)s%% of the cache limit used', percent=cache.percent) }}">
+				{% if cache.used %}<div class="cache-bar-fill{{ ' cache-bar-warn' if cache.near_limit }}" style="width: {{ [cache.percent, 100] | min }}%"></div>{% endif %}
+			</div>
+			{% endif %}
+
+			<p class="muted">
+				{% if cache.free is not none %}{{ _('Free space on the data volume: %(size)s MB.', size=(cache.free / 1048576) | round(0) | int) }}{% endif %}
+				{% if cache.last_removal_at %}
+					{{ _('Last removal: %(when)s (%(files)s episodes, %(size)s MB freed).',
+						when=cache.last_removal_at | shortdt,
+						files=cache.last_removed_files,
+						size=(cache.last_removed_bytes / 1048576) | round(1)) }}
+				{% elif cache.last_cleanup_at %}
+					{{ _('Last checked: %(when)s — nothing to remove.', when=cache.last_cleanup_at | shortdt) }}
+				{% endif %}
+			</p>
+
+			{% if cache.near_limit %}
+			<p class="cache-warn">{{ _('The cache is close to its limit — raise it above, or let your cards keep fewer episodes.') }}</p>
+			{% endif %}
 		</div>
 	</div>
 

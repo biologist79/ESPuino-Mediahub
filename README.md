@@ -56,7 +56,7 @@ reuses the existing image and keeps running the previous version.
 
 - **Python 3.12 + Flask** (served by Gunicorn in the container), image based on `python:3.12-slim`.
 - **Framework-free frontend** — hand-written CSS in the ESPuino look (blue top bar, logo). Works offline, no CDN dependencies.
-- Two volumes: `./data` (devices/cards/assignments in a single `db.json`, read-write) and `./media` (your own existing audio library, mounted read-only — MediaHub only browses and references it, it never copies or uploads files).
+- Two volumes: `./data` (devices/cards/assignments in a single `db.json`, plus the podcast episode cache, read-write) and `./media` (your own existing audio library, mounted read-only — MediaHub only browses and references it, it never copies or uploads files).
 - Runs as non-root (`33:33` / `www-data`) by default; see [Quick start](#quick-start).
 - **Multilingual** (DE/EN/FR) via Flask-Babel; language switcher top right, auto-detected via `Accept-Language`.
 - **Optional password** for the web UI (Settings page) — the ESPuino-facing API stays open regardless, since devices can't log in.
@@ -64,12 +64,13 @@ reuses the existing image and keeps running the previous version.
 ## Feature overview
 
 - **Devices** (`/devices`): ESPuinos that have contacted the hub (IP, last seen, last card).
-- **Cards & Assignments** (`/cards`): overview, assign/edit — pick files/folders from the mounted library via an inline tree browser (`static/js/media-browser.js`, modeled after the ESPuino web UI's own SD explorer) or set a webradio stream URL — force refresh (per card/all), delete.
+- **Cards & Assignments** (`/cards`): overview, assign/edit — three content types per card: files/folders from the mounted library via an inline tree browser (`static/js/media-browser.js`, modeled after the ESPuino web UI's own SD explorer), or a **podcast** (see below) — force refresh (per card/all), delete.
 - **One card on several ESPuinos**: the assignment form lists the other known devices as tick boxes and writes the same content to each ticked one as its own independent assignment (own play position, own cache). Devices that already carry the card are pre-ticked so an edit doesn't let siblings drift apart. Unticking never deletes — that stays the explicit Delete button, because a delete may call `DELETE /rfid` on the device.
+- **Podcasts** (concept §7.3): paste a podcast's **RSS feed** URL — the same address a podcast app would subscribe to — and pick *always the newest episode(s)* or specific episodes. The hub downloads the chosen episodes into its own cache (`<data>/podcasts/`) and hands the ESPuino an ordinary file manifest — **no firmware change**, and the card plays from the SD card offline like any other assignment. "Latest" cards are re-checked on a configurable interval (Settings) or on demand ("Check episodes"); a new episode is downloaded in the background and plays from the next tap onwards. Cached episodes are shared between cards and cleaned up automatically — you never tidy the cache by hand: an episode goes as soon as no card needs it, and the hub also sweeps hourly. Settings shows what the cache holds, how close it is to its limit, free disk space and when it last removed something. Two guards stop it filling the disk: a 512 MB free-space reserve and a configurable cache limit (Settings, default 4 GB). Hitting either stops *new* downloads and says so on the affected card — nothing already downloaded is deleted.
 - **New Cards**: filter at `/cards?pending=1` — cards registered on tap but not yet assigned (see concept §5.3). The card list and the dashboard refresh themselves: `static/js/live-cards.js` polls `GET /cards/state` every five seconds and reloads when the hub's card set changed, so a card tapped on an ESPuino appears without pressing F5. Polling rather than a server push is deliberate — Gunicorn runs two sync workers, and a held-open SSE stream per browser tab would starve the ESPuino-facing API. While a card ID is being typed or the duplicate dialog is open, a small banner offers the refresh instead of yanking the page away.
 - **Media** (`/media`): storage usage per card; `/media/browse?path=` is the JSON API backing the tree browser.
-- **Settings** (`/settings`): delete behavior lazy vs. secure (concept §13.1) — secure calls `DELETE /rfid` on the ESPuino and only removes the hub entry after a confirmed 200 response. Recursion depth for "use folder". Which devices an assignment pre-selects (only the one being edited, or all known ESPuinos) — a pre-selection only, never what gets written. Also: set/remove the optional hub password.
-- **MediaHub API**: `GET /<espId>/card/<cardId>/manifest.json` (manifest, or `pending` registration), `GET /media/<path>` (media files, path relative to the library root).
+- **Settings** (`/settings`): delete behavior lazy vs. secure (concept §13.1) — secure calls `DELETE /rfid` on the ESPuino and only removes the hub entry after a confirmed 200 response. Recursion depth for "use folder". Which devices an assignment pre-selects (only the one being edited, or all known ESPuinos) — a pre-selection only, never what gets written. How often podcast cards are checked for new episodes, and the podcast cache limit with its current usage (episodes held, free disk space, last automatic cleanup). Also: set/remove the optional hub password.
+- **MediaHub API**: `GET /<espId>/card/<cardId>/manifest.json` (manifest, or `pending` registration, or `preparing` while a podcast card is still downloading), `GET /media/<path>` (library files, path relative to the library root), `GET /podcast-media/<path>` (cached podcast episodes).
 
 ## Maintaining translations
 
@@ -99,12 +100,22 @@ If your change touches any `_()` / `ngettext()` string, please update the catalo
 Functional hub with device/card management, per-card manifests
 (`version` = SHA-256, including the force-refresh lever), a library file/folder
 browser for assignment (no uploads — files stay in place under `./media`),
-`pending` registration, lazy/secure delete, assignments that cover several
-ESPuinos in one save, a self-refreshing card list, and an optional web UI
-password.
+podcast cards from RSS feeds (newest-episode subscriptions, background
+download and cache cleanup), `pending` registration, lazy/secure delete,
+assignments that cover several ESPuinos in one save, a self-refreshing card
+list, and an optional web UI password.
 
 The ESPuino side is implemented and shipped with the firmware since version
 3.1: `MEDIAHUB` play mode, `MediaHub_HandleCardTapped()` in `src/MediaHub.cpp`,
 manifest download with LED progress, and — optionally — adoption of unknown
 cards straight from a hub, without teaching them on the device first. The
 user-facing side is documented in chapters 8 and 11 of the ESPuino handbook.
+
+**Keep the hub on your local network.** The ESPuino-facing endpoints
+(`manifest.json`, `/media/`, `/podcast-media/`) are deliberately
+unauthenticated — devices can't log in (concept §2). That is fine inside a
+household, but a hub reachable from the internet publishes whatever it
+serves. For podcast cards that matters beyond privacy: the cached episodes
+are somebody else's content, and republishing them is not yours to do. The
+optional web UI password protects the admin interface only, never these
+endpoints.

@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ESPuino MediaHub\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-09-26 12:52+0200\n"
+"POT-Creation-Date: 2026-09-27 12:06+0000\n"
 "PO-Revision-Date: 2026-07-15 09:43+0200\n"
 "Last-Translator: ESPuino MediaHub\n"
 "Language: fr\n"
@@ -17,23 +17,23 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: app.py:126
+#: app.py:146
 msgid "Incorrect password."
 msgstr "Mot de passe incorrect."
 
-#: app.py:148
+#: app.py:171
 #, python-format
 msgid "%(num)s device"
 msgid_plural "%(num)s devices"
 msgstr[0] "%(num)s appareil"
 msgstr[1] "%(num)s appareils"
 
-#: app.py:168
+#: app.py:191
 #, python-format
 msgid "Delete ESPuino %(esp_id)s?"
 msgstr "Supprimer l'ESPuino %(esp_id)s ?"
 
-#: app.py:170
+#: app.py:193
 #, python-format
 msgid ""
 "There is still %(num)s card assignment for this ESPuino, which must be "
@@ -52,11 +52,11 @@ msgstr[1] ""
 "doivent d'abord être supprimées. Les supprimer automatiquement ? Remarque"
 " : les cartes ne sont supprimées que localement dans MediaHub."
 
-#: app.py:196
+#: app.py:219
 msgid "Alias saved."
 msgstr "Alias enregistré."
 
-#: app.py:206
+#: app.py:232
 #, python-format
 msgid ""
 "Device %(esp_id)s and its %(num)s card assignment(s) deleted (locally in "
@@ -65,55 +65,137 @@ msgstr ""
 "Appareil %(esp_id)s et ses %(num)s assignation(s) de carte supprimés "
 "(uniquement localement dans MediaHub)."
 
-#: app.py:208
+#: app.py:234
 #, python-format
 msgid "Device %(esp_id)s deleted."
 msgstr "Appareil %(esp_id)s supprimé."
 
-#: app.py:217 templates/card_form.html:29
+#: app.py:243 templates/card_form.html:29
 msgid "Webradio"
 msgstr "Webradio"
 
-#: app.py:220
+#: app.py:247
+#, python-format
+msgid "%(num)s episode"
+msgid_plural "%(num)s episodes"
+msgstr[0] "%(num)s épisode"
+msgstr[1] "%(num)s épisodes"
+
+#: app.py:249
 #, python-format
 msgid "%(num)s file"
 msgid_plural "%(num)s files"
 msgstr[0] "%(num)s fichier"
 msgstr[1] "%(num)s fichiers"
 
-#: app.py:347
+#: app.py:260 templates/card_form.html:33 templates/media.html:33
+msgid "Podcast"
+msgstr "Podcast"
+
+#: app.py:263
+#, python-format
+msgid "newest episode"
+msgid_plural "%(num)s newest episodes"
+msgstr[0] "épisode le plus récent"
+msgstr[1] "%(num)s épisodes les plus récents"
+
+#: app.py:275
+msgid "up to date"
+msgstr "à jour"
+
+#: app.py:281
+#, python-format
+msgid "downloading %(done)s/%(total)s"
+msgstr "téléchargement %(done)s/%(total)s"
+
+#: app.py:286
+msgid "checking the feed…"
+msgstr "vérification du flux…"
+
+#: app.py:295
+#, python-format
+msgid ""
+"Cache limit of %(limit)s MB reached — no new episodes are downloaded. "
+"Raise it in Settings or keep fewer episodes."
+msgstr ""
+"Limite du cache de %(limit)s MB atteinte — aucun nouvel épisode n’est "
+"téléchargé. Augmentez-la dans les réglages ou gardez moins d’épisodes."
+
+#: app.py:304
+msgid ""
+"Not enough free disk space on the hub — MediaHub stopped before filling "
+"it up."
+msgstr ""
+"Espace disque insuffisant sur le hub — MediaHub s’est arrêté avant de le "
+"remplir."
+
+#: app.py:308
+msgid "sync failed"
+msgstr "échec de la synchronisation"
+
+#: app.py:309
+msgid "waiting for download"
+msgstr "en attente du téléchargement"
+
+#: app.py:439
 msgid "Card ID must be exactly 12 digits."
 msgstr "L'ID de la carte doit comporter exactement 12 chiffres."
 
-#: app.py:351
+#: app.py:443
 msgid "Please choose a known ESPuino."
 msgstr "Veuillez choisir un ESPuino connu."
 
-#: app.py:360 app.py:380
+#: app.py:452 app.py:472
 #, python-format
 msgid "Card %(id)s is already assigned on this ESPuino — opening it for editing."
 msgstr ""
 "La carte %(id)s est déjà assignée sur cet ESPuino — ouverture pour "
 "modification."
 
-#: app.py:374
+#: app.py:466
 msgid "Please choose a different, known ESPuino."
 msgstr "Veuillez choisir un autre ESPuino connu."
 
-#: app.py:394
+#: app.py:495
 #, python-format
 msgid "Card %(id)s duplicated to %(esp_id)s."
 msgstr "Carte %(id)s dupliquée sur %(esp_id)s."
 
-#: app.py:418
-msgid "A stream URL is required for webradio."
-msgstr "Une URL de flux est requise pour la webradio."
+#: app.py:522
+msgid "Please load a podcast feed first."
+msgstr "Veuillez d'abord charger un flux podcast."
 
-#: app.py:427
+#: app.py:553
+msgid "Please select at least one episode."
+msgstr "Veuillez sélectionner au moins un épisode."
+
+#: app.py:566 app.py:649
 msgid "Please choose a valid play mode."
 msgstr "Veuillez choisir un mode de lecture valide."
 
-#: app.py:446
+#: app.py:572
+msgid "This play mode only supports a single episode — please select just one."
+msgstr ""
+"Ce mode de lecture ne prend en charge qu'un seul épisode — veuillez n'en "
+"sélectionner qu'un."
+
+#: app.py:609
+msgid "A stream URL is required for webradio."
+msgstr "Une URL de flux est requise pour la webradio."
+
+#: app.py:630
+#, python-format
+msgid "Card %(id)s assigned — downloading the episodes now."
+msgstr "Carte %(id)s assignée — les épisodes sont en cours de téléchargement."
+
+#: app.py:636
+#, python-format
+msgid "Card %(id)s assigned on %(num)s ESPuinos — downloading the episodes now."
+msgstr ""
+"Carte %(id)s attribuée sur %(num)s ESPuinos — les épisodes sont en cours "
+"de téléchargement."
+
+#: app.py:668
 #, python-format
 msgid ""
 "Some selected files could not be used (missing, or not readable by the "
@@ -122,37 +204,42 @@ msgstr ""
 "Certains fichiers sélectionnés n'ont pas pu être utilisés (absents ou non"
 " lisibles par l'utilisateur du conteneur) et ont été ignorés : %(paths)s"
 
-#: app.py:455
+#: app.py:677
 msgid "At least one audio file is required."
 msgstr "Au moins un fichier audio est requis."
 
-#: app.py:459
+#: app.py:681
 msgid "This play mode only supports a single file — please select just one."
 msgstr ""
 "Ce mode de lecture ne prend en charge qu'un seul fichier — veuillez n'en "
 "sélectionner qu'un."
 
-#: app.py:472
+#: app.py:694
 #, python-format
 msgid "Card %(id)s assigned."
 msgstr "Carte %(id)s assignée."
 
-#: app.py:475
+#: app.py:697
 #, python-format
 msgid "Card %(id)s assigned on %(num)s ESPuinos."
 msgstr "Carte %(id)s attribuée sur %(num)s ESPuinos."
 
-#: app.py:497
+#: app.py:776
+#, python-format
+msgid "Checking the feed for new episodes of card %(id)s."
+msgstr "Recherche de nouveaux épisodes dans le flux pour la carte %(id)s."
+
+#: app.py:792
 #, python-format
 msgid "Force refresh triggered for card %(id)s."
 msgstr "Actualisation forcée déclenchée pour la carte %(id)s."
 
-#: app.py:504
+#: app.py:799
 #, python-format
 msgid "Force refresh triggered for all %(num)s cards."
 msgstr "Actualisation forcée déclenchée pour les %(num)s cartes."
 
-#: app.py:523
+#: app.py:818
 #, python-format
 msgid ""
 "Secure delete: ESPuino (%(esp_id)s) did not confirm the deletion. Card "
@@ -161,88 +248,98 @@ msgstr ""
 "Suppression sécurisée : l'ESPuino (%(esp_id)s) n'a pas confirmé la "
 "suppression. La carte a été conservée, veuillez réessayer."
 
-#: app.py:536
+#: app.py:834
 #, python-format
 msgid "Card %(id)s deleted (%(mode)s)."
 msgstr "Carte %(id)s supprimée (%(mode)s)."
 
-#: app.py:617
+#: app.py:955
 msgid "Recursion depth must be between 0 and 20."
 msgstr "La profondeur de récursion doit être comprise entre 0 et 20."
 
-#: app.py:620
+#: app.py:966
+msgid "The episode check interval must be between 0 and 10080 minutes (one week)."
+msgstr ""
+"L'intervalle de vérification doit être compris entre 0 et 10080 minutes "
+"(une semaine)."
+
+#: app.py:978
+msgid "The cache limit must be between 0 and 1048576 MB."
+msgstr "La limite du cache doit être comprise entre 0 et 1048576 MB."
+
+#: app.py:981
 msgid "Settings saved."
 msgstr "Paramètres enregistrés."
 
-#: app.py:630
+#: app.py:993
 msgid "Please enter a password."
 msgstr "Veuillez saisir un mot de passe."
 
-#: app.py:632
+#: app.py:995
 msgid "Passwords do not match."
 msgstr "Les mots de passe ne correspondent pas."
 
-#: app.py:635
+#: app.py:998
 msgid "Hub password set."
 msgstr "Mot de passe du hub défini."
 
-#: app.py:643
+#: app.py:1006
 msgid "Hub password removed."
 msgstr "Mot de passe du hub supprimé."
 
-#: manifest.py:79
+#: manifest.py:107
 msgid "Single track"
 msgstr "Piste unique"
 
-#: manifest.py:80
+#: manifest.py:108
 msgid "Single track (loop)"
 msgstr "Piste unique (boucle)"
 
-#: manifest.py:81
+#: manifest.py:109
 msgid "Audiobook (remembers position)"
 msgstr "Livre audio (mémorise la position)"
 
-#: manifest.py:82
+#: manifest.py:110
 msgid "Audiobook (loop)"
 msgstr "Livre audio (boucle)"
 
-#: manifest.py:83
+#: manifest.py:111
 msgid "Audiobook, recursive (remembers position)"
 msgstr "Livre audio, récursif (mémorise la position)"
 
-#: manifest.py:84
+#: manifest.py:112
 msgid "All tracks of a folder (sorted)"
 msgstr "Toutes les pistes d'un dossier (triées)"
 
-#: manifest.py:85
+#: manifest.py:113
 msgid "All tracks of a folder (shuffled)"
 msgstr "Toutes les pistes d'un dossier (aléatoire)"
 
-#: manifest.py:86
+#: manifest.py:114
 msgid "All tracks of a folder (sorted, loop)"
 msgstr "Toutes les pistes d'un dossier (triées, boucle)"
 
-#: manifest.py:87
+#: manifest.py:115
 msgid "All tracks of a folder (shuffled, loop)"
 msgstr "Toutes les pistes d'un dossier (aléatoire, boucle)"
 
-#: manifest.py:88
+#: manifest.py:116
 msgid "All tracks, recursive (shuffled)"
 msgstr "Toutes les pistes, récursif (aléatoire)"
 
-#: manifest.py:89
+#: manifest.py:117
 msgid "All tracks, recursive (sorted)"
 msgstr "Toutes les pistes, récursif (triées)"
 
-#: manifest.py:90
+#: manifest.py:118
 msgid "Single random track of a folder"
 msgstr "Piste aléatoire d'un dossier"
 
-#: manifest.py:91
+#: manifest.py:119
 msgid "Random subfolder (sorted)"
 msgstr "Sous-dossier aléatoire (trié)"
 
-#: manifest.py:92
+#: manifest.py:120
 msgid "Random subfolder (shuffled)"
 msgstr "Sous-dossier aléatoire (aléatoire)"
 
@@ -323,25 +420,25 @@ msgstr "Type de contenu"
 msgid "Audio files"
 msgstr "Fichiers audio"
 
-#: templates/card_form.html:36
+#: templates/card_form.html:40 templates/card_form.html:130
 msgid "Play mode"
 msgstr "Mode de lecture"
 
-#: templates/card_form.html:45
+#: templates/card_form.html:49
 msgid "Selected files"
 msgstr "Fichiers sélectionnés"
 
-#: templates/card_form.html:47
+#: templates/card_form.html:51
 msgid "No files selected yet — browse the library below."
 msgstr ""
 "Aucun fichier sélectionné pour l'instant — parcourez la bibliothèque ci-"
 "dessous."
 
-#: templates/card_form.html:51
+#: templates/card_form.html:55
 msgid "Media library"
 msgstr "Bibliothèque multimédia"
 
-#: templates/card_form.html:52
+#: templates/card_form.html:56
 msgid ""
 "Files come from the library mounted at /media — MediaHub doesn't store "
 "its own copies."
@@ -349,23 +446,23 @@ msgstr ""
 "Les fichiers proviennent de la bibliothèque montée dans /media — MediaHub"
 " n'en conserve aucune copie."
 
-#: templates/card_form.html:61
+#: templates/card_form.html:65
 msgid "Use folder"
 msgstr "Utiliser le dossier"
 
-#: templates/card_form.html:62
+#: templates/card_form.html:66
 msgid "No audio files here."
 msgstr "Aucun fichier audio ici."
 
-#: templates/card_form.html:63
+#: templates/card_form.html:67
 msgid "Remove"
 msgstr "Retirer"
 
-#: templates/card_form.html:64
+#: templates/card_form.html:68
 msgid "Could not list this folder (permission denied?)."
 msgstr "Ce dossier n'a pas pu être listé (accès refusé ?)."
 
-#: templates/card_form.html:66
+#: templates/card_form.html:70
 msgid ""
 "This play mode only supports one file — pick a different mode to select "
 "more."
@@ -373,7 +470,7 @@ msgstr ""
 "Ce mode de lecture ne prend en charge qu'un seul fichier — choisissez un "
 "autre mode pour en sélectionner plusieurs."
 
-#: templates/card_form.html:68
+#: templates/card_form.html:72
 msgid ""
 "Includes subfolders too (recursive play mode; depth configurable in "
 "Settings)."
@@ -381,15 +478,122 @@ msgstr ""
 "Inclut aussi les sous-dossiers (mode de lecture récursif ; profondeur "
 "configurable dans les paramètres)."
 
-#: templates/card_form.html:76
+#: templates/card_form.html:80
 msgid "Stream URL"
 msgstr "URL du flux"
 
-#: templates/card_form.html:83
+#: templates/card_form.html:87
+msgid "Feed URL"
+msgstr "Adresse du flux"
+
+#: templates/card_form.html:90
+msgid "Load feed"
+msgstr "Charger le flux"
+
+#: templates/card_form.html:93
+msgid ""
+"Any podcast feed works — the address a podcast app would subscribe to. "
+"MediaHub downloads the chosen episodes itself, so the ESPuino plays them "
+"from its SD card like any other assignment — offline included."
+msgstr ""
+"N'importe quel flux de podcast convient — l'adresse à laquelle une "
+"application de podcast s'abonnerait. MediaHub télécharge lui-même les "
+"épisodes choisis : l'ESPuino les joue depuis sa carte SD comme toute "
+"autre assignation, hors ligne compris."
+
+#: templates/card_form.html:99
+msgid "Selected podcast"
+msgstr "Podcast sélectionné"
+
+#: templates/card_form.html:104
+msgid "Which episodes?"
+msgstr "Quels épisodes ?"
+
+#: templates/card_form.html:109
+msgid "Always the newest"
+msgstr "Toujours le plus récent"
+
+#: templates/card_form.html:110
+msgid ""
+"the hub re-checks the feed and fetches new episodes on its own; the card "
+"plays the new one from the next tap onwards."
+msgstr ""
+"le hub revérifie le flux et récupère les nouveaux épisodes de lui-même ; "
+"la carte joue le nouvel épisode dès la prochaine pose."
+
+#: templates/card_form.html:114
+msgid "How many of the newest episodes?"
+msgstr "Combien des épisodes les plus récents ?"
+
+#: templates/card_form.html:120
+msgid "Specific episodes"
+msgstr "Épisodes précis"
+
+#: templates/card_form.html:121
+msgid "a fixed pick that never changes on its own."
+msgstr "une sélection fixe qui ne change jamais d'elle-même."
+
+#: templates/card_form.html:137
+msgid ""
+"Position-remembering modes are handy for long episodes. Note that with "
+"\"always the newest\" a remembered position carries over to the new "
+"episode."
+msgstr ""
+"Les modes qui mémorisent la position sont pratiques pour les épisodes "
+"longs. Attention : avec « toujours le plus récent », une position "
+"mémorisée est reportée sur le nouvel épisode."
+
+#: templates/card_form.html:148
+#, python-format
+msgid "%(num)s episodes"
+msgstr "%(num)s épisodes"
+
+#: templates/card_form.html:149
+#, python-format
+msgid "latest episode: %(date)s"
+msgstr "dernier épisode : %(date)s"
+
+#: templates/card_form.html:150
+msgid "Choose a different podcast"
+msgstr "Choisir un autre podcast"
+
+#: templates/card_form.html:151
+msgid "This feed currently has no playable episodes."
+msgstr "Ce flux n'a actuellement aucun épisode lisible."
+
+#: templates/card_form.html:152
+msgid ""
+"The feed as it is right now — when a new episode appears, the list moves "
+"up. Click one to play just that episode instead."
+msgstr ""
+"Le flux tel qu'il est maintenant — quand un nouvel épisode paraît, la "
+"liste avance. Cliquez sur un épisode pour ne jouer que celui-là."
+
+#: templates/card_form.html:153
+msgid "Pick the episodes this card plays."
+msgstr "Choisissez les épisodes que cette carte joue."
+
+#: templates/card_form.html:154
+msgid "Loading feed…"
+msgstr "Chargement du flux…"
+
+#: templates/card_form.html:155
+msgid "Could not read this feed."
+msgstr "Ce flux n’a pas pu être lu."
+
+#: templates/card_form.html:156
+msgid "This play mode only supports a single episode."
+msgstr "Ce mode de lecture ne prend en charge qu'un seul épisode."
+
+#: templates/card_form.html:157
+msgid "newest"
+msgstr "le plus récent"
+
+#: templates/card_form.html:165
 msgid "Write to these ESPuinos"
 msgstr "Écrire sur ces ESPuinos"
 
-#: templates/card_form.html:84
+#: templates/card_form.html:166
 msgid ""
 "Every ticked device gets its own independent assignment with the same "
 "content, so each one keeps its own play position and cache. Unticking "
@@ -401,20 +605,20 @@ msgstr ""
 "propre cache. Décocher ne supprime jamais rien — une attribution "
 "existante se retire avec « Supprimer » dans la liste des cartes."
 
-#: templates/card_form.html:89
+#: templates/card_form.html:171
 msgid "(the one you are editing)"
 msgstr "(celui que vous modifiez)"
 
-#: templates/card_form.html:95
+#: templates/card_form.html:177
 msgid "(already has this card)"
 msgstr "(possède déjà cette carte)"
 
-#: templates/card_form.html:103 templates/devices.html:35
-#: templates/settings.html:60
+#: templates/card_form.html:185 templates/devices.html:35
+#: templates/settings.html:107
 msgid "Save"
 msgstr "Enregistrer"
 
-#: templates/card_form.html:104 templates/cards.html:147
+#: templates/card_form.html:186 templates/cards.html:161
 msgid "Cancel"
 msgstr "Annuler"
 
@@ -537,53 +741,76 @@ msgstr "assignée"
 msgid "pending"
 msgstr "en attente"
 
-#: templates/cards.html:106
+#: templates/cards.html:109
 msgid "Assign"
 msgstr "Assigner"
 
-#: templates/cards.html:106
+#: templates/cards.html:109
 msgid "Edit"
 msgstr "Modifier"
 
-#: templates/cards.html:110
+#: templates/cards.html:113
 msgid "Force refresh"
 msgstr "Actualisation forcée"
 
-#: templates/cards.html:114
+#: templates/cards.html:118
+msgid ""
+"Check the feed for new episodes right now instead of waiting for the next"
+" scheduled check."
+msgstr ""
+"Consulter le flux tout de suite au lieu d'attendre la prochaine "
+"vérification planifiée."
+
+#: templates/cards.html:118
+msgid "Check episodes"
+msgstr "Vérifier les épisodes"
+
+#: templates/cards.html:123
 msgid "Could not load the manifest."
 msgstr "Le manifeste n'a pas pu être chargé."
 
-#: templates/cards.html:114
+#: templates/cards.html:123
 msgid "Manifest"
 msgstr "Manifeste"
 
-#: templates/cards.html:118
+#: templates/cards.html:127
 #, python-format
 msgid "Copy card %(id)s's configuration to:"
 msgstr "Copier la configuration de la carte %(id)s vers :"
 
-#: templates/cards.html:119
+#: templates/cards.html:128
 msgid "No other known ESPuino to duplicate to yet."
 msgstr "Aucun autre ESPuino connu vers lequel dupliquer pour l'instant."
 
-#: templates/cards.html:119 templates/cards.html:146
+#: templates/cards.html:128 templates/cards.html:160
 msgid "Duplicate"
 msgstr "Dupliquer"
 
-#: templates/cards.html:121
+#: templates/cards.html:130
 #, python-format
 msgid "Really delete card %(id)s?"
 msgstr "Vraiment supprimer la carte %(id)s ?"
 
-#: templates/cards.html:122 templates/devices.html:45
+#: templates/cards.html:132
+msgid ""
+"The downloaded episodes are removed from the hub. The copy already on the"
+" ESPuino stays there until the card is deleted on the device too — switch"
+" to \"secure delete\" in Settings to have MediaHub do that for you."
+msgstr ""
+"Les épisodes téléchargés sont supprimés du hub. La copie déjà présente "
+"sur l’ESPuino y reste jusqu’à ce que la carte soit aussi supprimée sur "
+"l’appareil — passez en « suppression sécurisée » dans les réglages pour "
+"que MediaHub s’en charge."
+
+#: templates/cards.html:136 templates/devices.html:45
 msgid "Delete"
 msgstr "Supprimer"
 
-#: templates/cards.html:139
+#: templates/cards.html:153
 msgid "Duplicate to another ESPuino"
 msgstr "Dupliquer vers un autre ESPuino"
 
-#: templates/cards.html:142
+#: templates/cards.html:156
 msgid "Target ESPuino"
 msgstr "ESPuino cible"
 
@@ -642,8 +869,12 @@ msgstr ""
 "synchronisation."
 
 #: templates/index.html:20
-msgid "Define which RFID card plays which content and play mode."
-msgstr "Définissez quelle carte RFID joue quel contenu et quel mode de lecture."
+msgid ""
+"Define which RFID card plays which content and play mode: library files, "
+"webradio or podcasts."
+msgstr ""
+"Définissez quelle carte RFID joue quel contenu et quel mode de lecture : "
+"fichiers de la bibliothèque, webradio ou podcasts."
 
 #: templates/index.html:21
 #, python-format
@@ -660,14 +891,12 @@ msgid "%(num)s pending"
 msgstr "%(num)s en attente"
 
 #: templates/index.html:34
-msgid "Storage usage per card; uploads happen right in the assignment form."
-msgstr ""
-"Utilisation du stockage par carte ; le téléversement se fait directement "
-"dans le formulaire d'assignation."
+msgid "Storage usage per card — what each ESPuino has to download and keep."
+msgstr "Espace utilisé par carte — ce que l'ESPuino concerné doit télécharger et conserver."
 
 #: templates/index.html:41
-msgid "Delete behavior (lazy/secure) and other options."
-msgstr "Comportement de suppression (lazy/secure) et autres options."
+msgid "Delete behavior (lazy/secure), recursion depth, podcast checks and cache."
+msgstr "Comportement de suppression (lazy/secure), profondeur de récursion, vérifications et cache des podcasts."
 
 #: templates/login.html:3 templates/login.html:7 templates/login.html:18
 msgid "Sign in"
@@ -682,37 +911,44 @@ msgid "Password"
 msgstr "Mot de passe"
 
 #: templates/media.html:8
-msgid "Storage usage per card. Uploads happen right in the card assignment form."
+msgid ""
+"Storage usage per card — that is how much the ESPuino has to download and"
+" keep on its SD card."
 msgstr ""
-"Utilisation du stockage par carte. Le téléversement se fait directement "
-"dans le formulaire d'assignation de la carte."
+"Espace utilisé par carte — c'est ce que l'ESPuino doit télécharger et "
+"conserver sur sa carte SD."
 
 #: templates/media.html:12
-msgid "No media files uploaded yet."
-msgstr "Aucun fichier multimédia téléversé pour l'instant."
+msgid "No card references any media yet."
+msgstr "Aucune carte ne référence encore de média."
 
 #: templates/media.html:21
+msgid "Source"
+msgstr "Source"
+
+#: templates/media.html:22
 msgid "Files"
 msgstr "Fichiers"
 
-#: templates/media.html:22
+#: templates/media.html:23
 msgid "Size"
 msgstr "Taille"
 
-#: templates/media.html:34
+#: templates/media.html:33
+msgid "Library"
+msgstr "Bibliothèque"
+
+#: templates/media.html:36
 msgid "Manage"
 msgstr "Gérer"
 
 #: templates/settings.html:8
 msgid ""
 "Configure how the hub behaves when a card assignment is deleted, how deep"
-" it looks into subfolders for recursive play modes, and which devices a "
-"new assignment is pre-selected for."
-msgstr ""
-"Configurez le comportement du hub lors de la suppression d'une "
-"attribution de carte, la profondeur d'exploration des sous-dossiers pour "
-"les modes de lecture récursifs, et les appareils présélectionnés pour une"
-" nouvelle attribution."
+" it looks into subfolders for recursive play modes, which devices a new "
+"assignment is pre-selected for, and how it keeps podcasts up to date."
+msgstr "Configurez le comportement du hub lors de la suppression d'une attribution de carte, la profondeur d'exploration des sous-dossiers pour les modes de lecture récursifs, les appareils présélectionnés pour une nouvelle attribution, et la façon dont il tient les podcasts à jour."
+
 
 #: templates/settings.html:13
 msgid "Delete behavior"
@@ -792,11 +1028,75 @@ msgstr ""
 "cartes doivent de toute façon fonctionner sur chaque appareil ; décochez "
 "celles que vous voulez exclure."
 
-#: templates/settings.html:65
+#: templates/settings.html:60
+msgid "Podcasts: check for new episodes every"
+msgstr "Podcasts : vérifier les nouveaux épisodes toutes les"
+
+#: templates/settings.html:63
+msgid ""
+"Minutes between two checks for cards set to \"always the newest\" (0 = "
+"never check automatically; \"Check episodes\" on the card list always "
+"works). A new episode is downloaded in the background and reaches the "
+"ESPuino on the next tap."
+msgstr ""
+"Minutes entre deux vérifications pour les cartes réglées sur « toujours "
+"le plus récent » (0 = jamais de vérification automatique ; « Vérifier les"
+" épisodes » dans la liste des cartes fonctionne toujours). Un nouvel "
+"épisode est téléchargé en arrière-plan et parvient à l’ESPuino à la "
+"prochaine pose."
+
+#: templates/settings.html:67
+msgid "Podcasts: cache limit"
+msgstr "Podcasts : limite du cache"
+
+#: templates/settings.html:70
+#, python-format
+msgid ""
+"Megabytes the downloaded episodes may occupy on the hub (0 = no limit). "
+"Reaching it stops new downloads; nothing already downloaded is deleted."
+msgstr "Mégaoctets que les épisodes téléchargés peuvent occuper sur le hub (0 = illimité). Une fois la limite atteinte, plus aucun nouvel épisode n'est téléchargé ; rien n'est supprimé."
+
+#: templates/settings.html:76
+#, python-format
+msgid "of %(limit)s MB"
+msgstr "sur %(limit)s MB"
+
+#: templates/settings.html:78
+#, python-format
+msgid "%(num)s episodes cached"
+msgstr "%(num)s épisodes en cache"
+
+#: templates/settings.html:83
+#, python-format
+msgid "%(percent)s%% of the cache limit used"
+msgstr "%(percent)s%% de la limite du cache utilisés"
+
+#: templates/settings.html:89
+#, python-format
+msgid "Free space on the data volume: %(size)s MB."
+msgstr "Espace libre sur le volume de données : %(size)s Mo."
+
+#: templates/settings.html:91
+#, python-format
+msgid "Last removal: %(when)s (%(files)s episodes, %(size)s MB freed)."
+msgstr "Dernière suppression : %(when)s (%(files)s épisodes, %(size)s MB libérés)."
+
+#: templates/settings.html:96
+#, python-format
+msgid "Last checked: %(when)s — nothing to remove."
+msgstr "Dernière vérification : %(when)s — rien à supprimer."
+
+#: templates/settings.html:101
+msgid ""
+"The cache is close to its limit — raise it above, or let your cards keep "
+"fewer episodes."
+msgstr "Le cache approche de sa limite — augmentez-la ci-dessus, ou laissez vos cartes conserver moins d'épisodes."
+
+#: templates/settings.html:112
 msgid "Hub password"
 msgstr "Mot de passe du hub"
 
-#: templates/settings.html:66
+#: templates/settings.html:113
 msgid ""
 "Optional — protects the web UI below. The ESPuino-facing API stays "
 "reachable either way, since devices can't log in."
@@ -805,19 +1105,19 @@ msgstr ""
 "ESPuino reste accessible dans tous les cas, puisque les appareils ne "
 "peuvent pas se connecter."
 
-#: templates/settings.html:71
+#: templates/settings.html:118
 msgid "New password"
 msgstr "Nouveau mot de passe"
 
-#: templates/settings.html:75
+#: templates/settings.html:122
 msgid "Confirm new password"
 msgstr "Confirmer le nouveau mot de passe"
 
-#: templates/settings.html:79
+#: templates/settings.html:126
 msgid "Set password"
 msgstr "Définir le mot de passe"
 
-#: templates/settings.html:81
+#: templates/settings.html:128
 msgid "Remove password"
 msgstr "Supprimer le mot de passe"
 
@@ -835,4 +1135,116 @@ msgstr "Supprimer le mot de passe"
 
 #~ msgid "unknown"
 #~ msgstr "inconnu"
+
+#~ msgid "Storage usage per card; uploads happen right in the assignment form."
+#~ msgstr ""
+#~ "Utilisation du stockage par carte ; "
+#~ "le téléversement se fait directement "
+#~ "dans le formulaire d'assignation."
+
+#~ msgid ""
+#~ "Storage usage per card. Uploads happen"
+#~ " right in the card assignment form."
+#~ msgstr ""
+#~ "Utilisation du stockage par carte. Le"
+#~ " téléversement se fait directement dans "
+#~ "le formulaire d'assignation de la carte."
+
+#~ msgid "No media files uploaded yet."
+#~ msgstr "Aucun fichier multimédia téléversé pour l'instant."
+
+#~ msgid ""
+#~ "Storage usage per card, plus the "
+#~ "size of the hub's podcast episode "
+#~ "cache."
+#~ msgstr ""
+#~ "Espace utilisé par carte, plus la "
+#~ "taille du cache d'épisodes de podcast"
+#~ " du hub."
+
+#~ msgid "Podcast cache"
+#~ msgstr "Cache de podcasts"
+
+#~ msgid ""
+#~ "This is the only media MediaHub "
+#~ "stores itself: the podcast episodes it"
+#~ " downloaded for your cards (%(num)s "
+#~ "in total). Files from your library "
+#~ "always stay where they are and are"
+#~ " never copied."
+#~ msgstr ""
+#~ "Ce sont les seuls médias que "
+#~ "MediaHub stocke lui-même : les "
+#~ "épisodes de podcast téléchargés pour vos"
+#~ " cartes (%(num)s au total). Les "
+#~ "fichiers de votre bibliothèque restent "
+#~ "toujours en place et ne sont "
+#~ "jamais copiés."
+
+#~ msgid "You never have to clean this up."
+#~ msgstr "Vous n’avez jamais à faire le ménage ici."
+
+#~ msgid ""
+#~ "MediaHub removes an episode as soon "
+#~ "as no card needs it any more "
+#~ "— when a card moves on to a"
+#~ " newer episode, when its selection "
+#~ "changes, and when a card or device"
+#~ " is deleted. It also checks once "
+#~ "an hour on its own."
+#~ msgstr ""
+#~ "MediaHub supprime un épisode dès "
+#~ "qu’aucune carte n’en a plus besoin "
+#~ "— quand une carte passe à un "
+#~ "épisode plus récent, quand sa sélection"
+#~ " change, et quand une carte ou "
+#~ "un appareil est supprimé. Il vérifie "
+#~ "aussi de lui-même une fois par "
+#~ "heure."
+
+#~ msgid ""
+#~ "The cache is close to its limit."
+#~ " New episodes are no longer "
+#~ "downloaded once it is reached — "
+#~ "raise the limit in Settings, or "
+#~ "let your cards keep fewer episodes. "
+#~ "Nothing already downloaded is deleted "
+#~ "for this."
+#~ msgstr ""
+#~ "Le cache approche de sa limite. "
+#~ "Une fois atteinte, plus aucun épisode"
+#~ " n’est téléchargé — augmentez la "
+#~ "limite dans les réglages ou faites "
+#~ "garder moins d’épisodes à vos cartes."
+#~ " Rien de déjà téléchargé n’est "
+#~ "supprimé pour autant."
+
+#~ msgid ""
+#~ "Free space on the data volume: "
+#~ "%(size)s MB. MediaHub always keeps 512"
+#~ " MB free and stops downloading before"
+#~ " it runs out."
+#~ msgstr ""
+#~ "Espace libre sur le volume de "
+#~ "données : %(size)s MB. MediaHub garde"
+#~ " toujours 512 MB libres et cesse "
+#~ "de télécharger avant de manquer de "
+#~ "place."
+
+#~ msgid ""
+#~ "When the limit is reached, no new"
+#~ " episodes are downloaded and the "
+#~ "affected card says so — nothing "
+#~ "already downloaded is deleted. Episodes "
+#~ "no card needs any more are always"
+#~ " removed automatically, limit or not."
+#~ msgstr ""
+#~ "Une fois la limite atteinte, plus "
+#~ "aucun épisode n’est téléchargé et la "
+#~ "carte concernée l’indique — rien de "
+#~ "déjà téléchargé n’est supprimé. Les "
+#~ "épisodes dont aucune carte n’a plus "
+#~ "besoin sont de toute façon toujours "
+#~ "supprimés automatiquement, avec ou sans "
+#~ "limite."
 

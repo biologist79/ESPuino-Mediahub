@@ -68,6 +68,34 @@ def is_valid_file_play_mode(play_mode):
     return play_mode in _FILE_PLAY_MODE_VALUES
 
 
+# A podcast card ends up as an ordinary file manifest (the hub caches the
+# episodes, §7.3), so every file play mode would technically work — but a
+# podcast card is a handful of episodes in one folder, not a sprawling
+# library tree. Offering "random subfolder" or "single random track" for it
+# would just be noise, so the dropdown is this curated subset, in the order
+# that makes sense for episodes (position-remembering first: podcast
+# episodes are long). Labels are reused from FILE_PLAY_MODES above, so they
+# need no separate translation.
+PODCAST_PLAY_MODES = [
+    (3, "Audiobook (remembers position)"),
+    (16, "Audiobook, recursive (remembers position)"),
+    (1, "Single track"),
+    (2, "Single track (loop)"),
+    (4, "Audiobook (loop)"),
+    (5, "All tracks of a folder (sorted)"),
+    (15, "All tracks, recursive (sorted)"),
+    (6, "All tracks of a folder (shuffled)"),
+]
+
+DEFAULT_PODCAST_PLAY_MODE = PODCAST_PLAY_MODES[0][0]
+
+_PODCAST_PLAY_MODE_VALUES = {value for value, _label in PODCAST_PLAY_MODES}
+
+
+def is_valid_podcast_play_mode(play_mode):
+    return play_mode in _PODCAST_PLAY_MODE_VALUES
+
+
 def _translation_placeholders():  # pragma: no cover
     """Never called at runtime. `pybabel extract` only picks up string
     literals passed directly to `_()`; the template renders these labels
@@ -98,7 +126,14 @@ def _canonical_json(obj):
 
 
 def build_manifest(card_id, card, files_base_url):
-    """Builds the public manifest (with `version`) for an assigned card."""
+    """Builds the public manifest (with `version`) for an assigned card.
+
+    A podcast card (`kind == "podcast"`) produces exactly the same
+    file-list manifest as a library card — the difference is only *where*
+    its bytes come from, which `files_base_url` already expresses (the hub's
+    podcast cache instead of the media library). That's deliberate: the
+    ESPuino needs no notion of podcasts at all (§7.3).
+    """
     if card["kind"] == "webradio":
         body = {
             "schema": 1,

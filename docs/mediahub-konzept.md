@@ -15,7 +15,7 @@ Es ist ein Feature für wenige Power-User; wer es nicht nutzt, bemerkt nichts da
 - **Keine Cloud.** Der Hub läuft lokal beim Nutzer (Docker).
 - **Nichts wird auf der RFID-Karte gespeichert.** Wir arbeiten ausschließlich mit der ausgelesenen 12-stelligen Nummer.
 - **Keine Änderung des NVS-Speicherformats.**
-- **Kein Streaming der eigenen Mediathek.** Datei-Inhalte werden auf die SD geladen und lokal abgespielt. (Webradio-Zuweisungen werden hingegen direkt gestreamt — siehe §7.2.)
+- **Kein Streaming der eigenen Mediathek.** Datei-Inhalte werden auf die SD geladen und lokal abgespielt — das gilt auch für Podcast-Folgen, die der Hub vorher selbst herunterlädt (§7.3). (Webradio-Zuweisungen werden hingegen direkt gestreamt — siehe §7.2.)
 - **Kein Blockieren der Wiedergabe durch Netzwerk-Timeouts** (Offline-/Unterwegs-Tauglichkeit ist Pflicht).
 - **Keine Authentifizierung der ESPuino-Endpunkte** (§6). Manifest- und Medien-Abruf bleiben unauthentifiziert, da die Geräte sich nicht anmelden können. Für das Hub-Web-UI selbst gibt es optional ein Passwort (§5.4) — das ist eine reine Zugriffs-Absicherung der Verwaltungsoberfläche, keine Auth zwischen ESPuino und Hub.
 
@@ -144,6 +144,8 @@ Manifest (pro Karte)   GET  http://<host:port>/<espId>/card/<cardId>/manifest.js
 Mediendateien          GET  <filesBaseUrl>/<files[].path>
 ```
 
+`filesBaseUrl` ist `…/media/` für Bibliotheks-Karten und `…/podcast-media/` für Podcast-Karten (§7.3) — für den ESPuino beides nur ein HTTP-Prefix. Beide Endpunkte bleiben unauthentifiziert, da die Geräte sich nicht anmelden können (§2).
+
 Ein Manifest-Request beim Auflegen dient zugleich der **Registrierung** (§5.3): Kennt der Hub die Karte noch nicht, legt er sie als noch-nicht-zugewiesen an und antwortet negativ. Ein separater Register-Endpoint ist damit nicht nötig.
 
 ## 7. Manifest-Format
@@ -202,6 +204,40 @@ Trägt eine Karte einen Webradio-Sender, gibt es **keine Dateien** herunterzulad
 - **Offline nicht abspielbar** — Webradio braucht prinzipbedingt Netz.
 
 Gemischte `LOCAL_M3U`-Listen (SD-Dateien und Webstreams gemischt) unterstützt MediaHub **nicht**.
+
+### 7.3 Podcast-Variante
+
+Neben „Audiodateien“ und „Webradio“ gibt es beim Zuweisen einer Karte einen **dritten Inhaltstyp: Podcast**. Der Admin fügt die **Feed-Adresse** eines Podcasts ein — dieselbe, die eine Podcast-App abonnieren würde — und wählt **„immer die neueste Folge(n)“** oder **konkrete Episoden**. Inspiriert von [espuino-podcast-server](https://github.com/jpgorganizer/espuino-podcast-server), aber in die Hub-Architektur eingepasst statt als zweiter Dienst daneben.
+
+**Der ESPuino lernt dabei nichts Neues.** Das Manifest einer Podcast-Karte ist ein ganz normales Datei-Manifest (§7.1); einziger Unterschied ist die `filesBaseUrl`, die auf den Podcast-Cache des Hubs (`/podcast-media/`) statt auf die Medienbibliothek zeigt. Dass der Hub die Folgen dafür selbst herunterlädt, statt dem ESPuino die Episoden-URL zu geben, ist der Kern der Entscheidung — Begründung und verworfene Alternative stehen in #31.
+
+**Die Karte speichert Absicht, nicht Dateien** — Feed-Adresse, `selection` = `latest` | `episodes`, Anzahl bzw. Episoden-IDs, playMode. Die Dateiliste entsteht erst beim Sync, und der läuft ausschließlich im Hintergrund (`podcast_sync.py`), **niemals** im Manifest-Request (§3.2):
+
+```text
+Absicht speichern  →  Zustand "pending"
+Worker: Feed abrufen (welche Folgen sind das gerade?)
+        → je Folge: Cache-Treffer oder Download (.tmp → SHA → rename, wie §13)
+        → Dateiliste + Metadaten an der Karte speichern, Zustand "ready"
+Fehler → Zustand "error" + Meldung im Karten-UI; Retry nach 10 Minuten
+```
+
+- Genau **ein Worker pro Container**, per `flock` auf `DATA_DIR/podcast-sync.lock` gewählt — stirbt er, übernimmt ein anderer, ohne Heartbeat oder Stale-Lock-Pflege.
+- Liegt noch keine Datei vor, antwortet der Manifest-Endpunkt **`not_ready`/`preparing` (404)** statt mit einem leeren Manifest. Eine neue Folge greift wie jede Inhaltsänderung beim nächsten Auflegen (§9).
+- **`latest` wird periodisch nachgesehen** (Intervall konfigurierbar, Default 6 h, `0` = nie; zusätzlich ein Button je Karte), maximal **20 Folgen pro Karte**. Abspielmodi sind eine kuratierte Teilmenge der Datei-Modi, Einzeltitel-Modi serverseitig auf eine Folge begrenzt.
+
+**Der Cache liegt unter `DATA_DIR/podcasts/<podcastId>/<datum>_<episodenId>.<ext>`** — nicht unter `/media`, das ist read-only die Bibliothek des Admins (§5.4). Das führende Datum macht die Dateisortierung = chronologische Reihenfolge; Folgen werden zwischen Karten geteilt.
+
+- **Aufräumen automatisch — der Nutzer räumt nie selbst auf.** Nicht mehr referenzierte Folgen fallen nach jedem Sync, bei jedem Karten-/Geräte-Löschen und stündlich weg (auf dem ESPuino: §10/§13.1).
+- **Zwei Bremsen gegen Vollaufen**, beide *vor* dem ersten geschriebenen Byte: eine Platzreserve auf dem Daten-Volume und ein konfigurierbares Cache-Limit. Greift eine davon, werden **keine neuen** Folgen geladen und **nichts gelöscht** — stilles Verdrängen würde heimlich entfernen, was der Admin bewusst konfiguriert hat. Die Karte sagt stattdessen, was zu tun ist.
+
+**Der Hub gehört ins lokale Netz.** Die ESPuino-Endpunkte sind bewusst unauthentifiziert (§2), das optionale Passwort (§5.4) schützt nur die Verwaltungsoberfläche. Ein aus dem Internet erreichbarer Hub verbreitet die zwischengespeicherten Folgen fremder Anbieter weiter, und das deckt keine Privatkopie-Schranke mehr.
+
+**Bewusste Einschränkungen:**
+
+- **Ein Feed ist ein gleitendes Fenster.** Eine fest gewählte Folge, die herausgerutscht ist, lässt sich nicht mehr auflösen; die Karte sagt das in einem Satz statt in einem Download-Fehler je Folge.
+- **Die Feed-Adresse kommt vom Admin.** Der Abruf ist auf `http(s)` und in der Größe begrenzt; welchen Feed sein eigener (angemeldeter) Admin abonnieren darf, schreibt der Hub darüber hinaus nicht vor.
+- **Hörbuch-Modus + „immer die neueste“:** Die Abspielposition liegt an der Karte (§8.1), nicht an der Folge — wechselt die Folge, wandert die alte Position mit. Ein Einzeltitel-Modus ist dafür meist die bessere Wahl.
+- **Nur RSS, kein Katalog.** Ein Katalog als zweite Quelle wäre über ein `source`-Feld an der Karte nachrüstbar.
 
 ## 8. playMode: `MEDIAHUB`-Marker im NVS, echter Modus aus dem Manifest
 
@@ -414,6 +450,7 @@ Ein Code-Pfad für beide Auslöser: Der **Nutzer** löscht die Karte im ESPuino-
 | 28 | Geräte-Alias-Liste im Hub (frei vergebbarer Name je `espId`, z. B. „Kinderzimmer") — reine Anzeige-Ergonomie, da die vom ESPuino gesendete `espId` (MAC/Hostname) für Menschen unhandlich ist. Gerät im Hub-UI löschbar; bestehende Zuweisungen dieses Geräts werden dabei nach Bestätigung mit gelöscht (nur der Hub-Datensatz, nie ESPuino/NVS). |
 | 29 | **Play-Position-Persistenz (§8.1):** NVS-Format korrigiert auf die tatsächlichen vier Felder `path#lastPlayPos#playMode#trackLastPlayed`. `AudioPlayer_NvsRfidWriteWrapper()` muss bei einem `mediahub://`-Pfad das `playMode`-Feld beim Zurückschreiben immer auf `MEDIAHUB` erzwingen (statt des echten, gerade abgespielten Modus) — sonst überschreibt der erste Pause-/Trackwechsel-Save den Marker und die Karte wird beim nächsten Auflegen nicht mehr als MediaHub-Karte erkannt. `AudioPlayer_SetPlaylist()` wird beim Abspielen mit dem echten Manifest-`playMode` plus den aus dem NVS gelesenen `lastPlayPos`/`trackLastPlayed` aufgerufen — dadurch greifen `saveLastPlayPosition` und der Shutdown-Flush unverändert, ohne dass AudioPlayer.cpp/System.cpp MediaHub kennen müssen. |
 | 30 | **Downloadpuffer-Lebensdauer an den TLS-Handshake gekoppelt (§13):** Die beiden 16-KB-Doppelpuffer werden pro Datei erst nach erfolgreichem Handshake alloziert (bevorzugt intern, PSRAM nur als Fallback) und nach dem Transfer sofort wieder freigegeben — dauerhafte interne Allokation hätte dem https-Handshake der jeweils nächsten Datei den nötigen zusammenhängenden Heap weggenommen (`HTTPC_ERROR_CONNECTION_REFUSED`, auf echter Hardware reproduziert). |
+| 31 | **Podcasts als dritter Inhaltstyp (§7.3):** Der Hub lädt die gewählten Folgen selbst herunter und liefert ein gewöhnliches Datei-Manifest (nur andere `filesBaseUrl`) — daher **keine Firmware-Änderung, kein neues Manifest-Feld**, und die Karte bleibt offline abspielbar. Verworfen: die Redirect-/Stream-Variante (ESPuino streamt die Episoden-URL) — sie kann `size`/`sha256` nicht liefern, bräuchte HTTPS-Streaming auf dem ESP32 und wäre offline unbrauchbar. Auflösen und Herunterladen passiert in einem Hintergrund-Worker (genau einer pro Container, `flock`-gewählt), nie im Manifest-Request; neue Folgen greifen — wie jede andere Inhaltsänderung — beim nächsten Auflegen. |
 
 ## 17. Implementierungsplan ESPuino-Seite (Phasen)
 

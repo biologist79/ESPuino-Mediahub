@@ -5,11 +5,11 @@
 {% block content %}
 <section class="page-head">
 	<h1>{{ _('Media') }}</h1>
-	<p class="muted">{{ _('Storage usage per card. Uploads happen right in the card assignment form.') }}</p>
+	<p class="muted">{{ _('Storage usage per card — that is how much the ESPuino has to download and keep on its SD card.') }}</p>
 </section>
 
 {% if not rows %}
-	<p class="empty-state">{{ _('No media files uploaded yet.') }}</p>
+	<p class="empty-state">{{ _('No card references any media yet.') }}</p>
 {% else %}
 	<div class="table-wrap">
 		<table>
@@ -18,6 +18,7 @@
 					<th>{{ _('Card ID') }}</th>
 					<th>{{ _('Device') }}</th>
 					<th>{{ _('Name') }}</th>
+					<th>{{ _('Source') }}</th>
 					<th>{{ _('Files') }}</th>
 					<th>{{ _('Size') }}</th>
 					<th></th>
@@ -29,6 +30,7 @@
 					<td><code>{{ card.card_id }}</code></td>
 					<td>{{ device_label }}</td>
 					<td>{{ card.name or "—" }}</td>
+					<td>{{ _('Podcast') if card.kind == "podcast" else _('Library') }}</td>
 					<td>{{ card.files | length }}</td>
 					<td>{{ (total_size / 1048576) | round(1) }}&nbsp;MB</td>
 					<td><a class="btn btn-small" href="{{ url_for('assign_card', esp_id=card.esp_id, card_id=card.card_id) }}">{{ _('Manage') }}</a></td>
