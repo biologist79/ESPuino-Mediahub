@@ -3,8 +3,11 @@
 A single JSON file (``db.json``) under ``DATA_DIR`` is plenty for the
 expected scale (a handful of devices, a few dozen cards) — a database
 server would be pure overhead here. Writes are serialized by a
-process-local lock and applied atomically (tmp file + rename), mirroring
-the download pattern used on the ESPuino itself (concept §13).
+process-local lock *and* an ``flock`` on a sibling file, then applied
+atomically (tmp file + rename), mirroring the download pattern used on the
+ESPuino itself (concept §13). The cross-process lock matters because the
+container runs several gunicorn workers: without it, a read-modify-write in
+one of them could silently drop a change another made in the meantime.
 
 Cards are keyed by (esp_id, card_id), not card_id alone — the same
 physical card can be enrolled on several ESPuinos (that's the point of
@@ -14,6 +17,7 @@ an assignment already knows exactly which one ESPuino to call, no more
 guessing from whichever device last happened to tap the card.
 """
 
+import fcntl
 import json
 import os
 import threading
@@ -51,10 +55,31 @@ class Store:
     def __init__(self, data_dir):
         self.data_dir = data_dir
         self.db_path = os.path.join(data_dir, "db.json")
+        self.lock_path = self.db_path + ".lock"
         os.makedirs(data_dir, exist_ok=True)
-        if not os.path.exists(self.db_path):
-            self._write(_DEFAULT_DB)
-        else:
+        self._ensure_db()
+
+    def _ensure_db(self):
+        """Creates db.json on first start, or migrates an existing one.
+
+        Under the same cross-process lock as every other write: the container
+        boots several gunicorn workers at once and each one constructs a
+        Store, so on a fresh data volume they would otherwise all take the
+        "file is missing" branch, write the temp file and rename it — the
+        first one to finish leaves the others renaming a file that is no
+        longer there, and those workers die on boot with ENOENT.
+        """
+        created = False
+        with _lock, open(self.lock_path, "a+b") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                if not os.path.exists(self.db_path):
+                    self._write(_DEFAULT_DB)
+                    created = True
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+        if not created:
+            # Takes the lock itself, so it must run once this one is released.
             self._migrate_legacy_cards()
 
     # -- low-level ---------------------------------------------------
@@ -63,17 +88,28 @@ class Store:
             return json.load(f)
 
     def _write(self, data):
-        tmp_path = self.db_path + ".tmp"
+        # Process-unique temp name, so two writers can never rename each
+        # other's file out from under themselves (see _ensure_db).
+        tmp_path = f"{self.db_path}.{os.getpid()}.tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
         os.replace(tmp_path, self.db_path)
 
     def _mutate(self, fn):
-        """Read, let fn mutate the data in place, write back atomically."""
-        with _lock:
-            data = self._read()
-            result = fn(data)
-            self._write(data)
+        """Read, let fn mutate the data in place, write back atomically.
+
+        The whole read-modify-write runs under both locks, so it is atomic
+        against the other threads of this process *and* against the other
+        gunicorn workers.
+        """
+        with _lock, open(self.lock_path, "a+b") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                data = self._read()
+                result = fn(data)
+                self._write(data)
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
             return result
 
     def _migrate_legacy_cards(self):
