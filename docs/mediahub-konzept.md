@@ -1,6 +1,6 @@
 # MediaHub — Detailspezifikation
 
-*Stand: 16. Juli 2026 · Branch `feature-mediahub` · Status: Hub-Server (`mediahub/`) implementiert und getestet; ESPuino-Firmware-Seite noch offen (§15)*
+*Stand: 6. Oktober 2026 · Status: Hub und ESPuino-Seite implementiert; die Firmware-Seite ist seit Version 3.1 im Release. Das Dokument beschreibt den umgesetzten Stand, nicht mehr den Plan.*
 
 ## 1. Worum es geht
 
@@ -100,6 +100,8 @@ Wichtig: Die Zuweisung gehört zu **genau diesem** ESPuino (§5.5) — dasselbe 
 
 **Warum beim Auflegen statt beim Anlernen:** So ist der Zeitpunkt des ID-Pushs frei wählbar — einfach Karte auflegen. Käme die Registrierung beim Anlernen, müsste man zum erneuten Pushen (z. B. nach einem Hub-Reset) die Karte neu anlernen. Durch die Kopplung ans Auflegen genügt ein erneutes Auflegen.
 
+**Nachtrag: unbekannte Karten können sich selbst bedienen.** Der Ablauf oben verlangt, dass jede Karte an jedem Gerät von Hand angelernt wird (Schritt 1). Wer mehrere ESPuinos betreibt — also die Zielgruppe dieses Features —, macht das für jede Karte mehrfach. Optional darf ein ESPuino deshalb eine ihm unbekannte Karte bei seinen registrierten Medienservern (§5.1) anfragen, bevor er sie zurückweist: Kennt einer von ihnen die Karte und hat sie dort einen Inhalt, übernimmt der ESPuino die Zuweisung selbst und spielt sofort. Schritt 1 entfällt damit für alle Geräte außer dem ersten. Die Option ist **standardmäßig aus** und im MediaHub-Tab des ESPuino-Web-Interface zu finden; der übrige Ablauf bleibt unberührt. (Diskussion: [forum #4779](https://forum.espuino.de/t/espuino-mediahub-feature-requests/4779).)
+
 Einrichtungs-Ablauf end-to-end:
 
 ```text
@@ -118,7 +120,10 @@ Einrichtungs-Ablauf end-to-end:
 - **Löschen einer Zuweisung löscht nie Dateien in der Bibliothek** — der Hub besitzt sie nicht, er referenziert sie nur. Das gilt für lazy- wie secure-delete gleichermaßen (§13.1); beide räumen ausschließlich den Hub-eigenen Eintrag (und ggf. den ESPuino-Cache) auf, nie die Quelldateien.
 - Mehrere Karten dürfen denselben Ordner/dieselben Dateien referenzieren (z. B. dieselbe Geschichte für zwei Kinder-Karten).
 - Der „Ordner verwenden"-Button im Datei-Browser sammelt standardmäßig nur die Dateien der gewählten Ebene. Bei den **rekursiven** Abspielmodi (`AUDIOBOOK_RECURSIVE`, `ALL_TRACKS_OF_DIR_SORTED_RECURSIVE`, `ALL_TRACKS_OF_DIR_RANDOM_RECURSIVE`) steigt er stattdessen in Unterordner ab — begrenzt durch eine in den Einstellungen konfigurierbare **Rekursionstiefe** (Default 3, Bereich 0–20), damit eine riesige Bibliothek nicht versehentlich ein unbegrenzt großes Manifest erzeugt. Nicht-rekursive Modi ignorieren diese Einstellung und nehmen immer nur die direkte Ordnerebene.
+- **Nicht-rekursive Ordner-Modi verlangen genau einen Ordner.** Der ESPuino bekommt nie eine Dateiliste übergeben, sondern den Ordner, den die Dateien des Manifests gemeinsam haben — liegen sie in mehreren, bleibt nur die Wurzel des Kartenordners, und ein nicht absteigender Modus findet dort nur Unterverzeichnisse und spielt nichts. Der Hub kennt beide Hälften und lässt die Kombination deshalb gar nicht erst entstehen: Im Datei-Browser legt die erste Auswahl den Ordner fest, Dateien aus einem zweiten werden mit Hinweis abgelehnt, und beim Speichern prüft der Server es noch einmal. Ein gemeinsames Dach genügt dabei nicht — `A/x.mp3` und `A/B/y.mp3` scheitern ebenso, weil der Scan nie bis `B` kommt. Für mehrere Ordner sind die rekursiven Modi da.
 - Ein **„Manifest"-Button** je zugewiesener Karte zeigt im Hub-Web-UI das exakte JSON, das ein ESPuino für diese Karte bekäme (derselbe Manifest-Builder wie §7.1, aber ohne die Seiteneffekte des echten Endpunkts wie Geräte-Tracking oder Pending-Registrierung) — reine Debugging-/Kontroll-Ergonomie.
+
+**Selbstaktualisierende Kartenliste.** Kartenliste und Übersichtsseite fragen im Fünf-Sekunden-Takt einen kleinen Endpunkt nach dem Stand der Kartenmenge und laden sich neu, wenn er sich geändert hat — eine am ESPuino aufgelegte Karte erscheint damit ohne F5. Bewusst Polling statt Server-Push: gunicorn fährt wenige synchrone Worker, und ein offen gehaltener Stream je Browser-Tab würde den ESPuino-Endpunkten die Arbeiter wegnehmen. Während eine Karten-ID getippt wird oder ein Dialog offen steht, bietet stattdessen ein kleines Banner die Aktualisierung an, statt die Seite unter den Händen wegzuziehen.
 
 **Optionales Passwort fürs Hub-Web-UI.** Über die Einstellungen-Seite kann der Admin ein Passwort setzen, ändern oder wieder entfernen; gespeichert wird nur ein gesalzener Hash (nie das Klartext-Passwort) in der JSON-DB. Ist ein Passwort gesetzt, verlangt jede Web-UI-Seite eine Anmeldung (Session-Cookie). Die ESPuino-Endpunkte (§6) bleiben davon **unberührt** — sie sind technisch nicht absicherbar, da die Geräte sich nicht anmelden können, und das war ohnehin nie das Bedrohungsmodell (§2).
 
@@ -131,7 +136,8 @@ Einrichtungs-Ablauf end-to-end:
 - Man kann **dieselbe** 12-stellige Karten-ID mehrfach anlegen — einmal pro ESPuino. Jede (espId, cardId)-Kombination ist ein eigener, unabhängiger Datensatz mit eigenem Namen, Abspielmodus/Dateien und eigenem Lifecycle.
 - Beim manuellen Anlegen im Hub-Web-UI (§5.3) wählt der Admin daher **zusätzlich zur Karten-ID auch das Ziel-ESPuino** aus einem Dropdown — befüllt mit allen Geräten, die sich beim Hub schon mindestens einmal gemeldet haben (jede Manifest-Anfrage registriert das anfragende Gerät, auch bei unbekannten Karten, siehe §5.3).
 - Damit ist **Secure Delete eindeutig**: Eine Zuweisung kennt ihr ESPuino direkt, keine Heuristik über „zuletzt gesehen" mehr nötig.
-- Ein **„Duplicate"-Button** je zugewiesener Karte ist die Ergonomie-Abkürzung für genau diesen Fall: Er übernimmt Name, Abspielmodus/Dateien bzw. Stream-URL unverändert in eine neue, unabhängige Zuweisung für ein anderes (bereits bekanntes) ESPuino — spart das manuelle Nachbauen der Konfiguration, wenn dieselbe Karte auf einem zweiten Gerät genauso funktionieren soll.
+- Das Zuweisungsformular listet die übrigen bekannten Geräte als **Ankreuzfelder** und schreibt denselben Inhalt in einem Speichervorgang an jedes angehakte — als jeweils eigene, unabhängige Zuweisung mit eigener Abspielposition und eigenem Cache. Geräte, die die Karte bereits tragen, sind vorausgewählt, damit eine Änderung die Geschwister nicht auseinanderlaufen lässt. **Ein Häkchen zu entfernen löscht nie**: Das bleibt dem ausdrücklichen Löschen-Knopf vorbehalten, denn ein Löschvorgang kann `DELETE /rfid` auf dem Gerät auslösen (§13.1) und ist nichts, was ein Speichern-Knopf nebenbei tun darf. Welche Geräte vorausgewählt sind, wenn die Karte noch nirgends liegt, stellt man in den Einstellungen ein (nur das meldende Gerät, oder alle) — eine Vorauswahl, nie eine Festlegung dessen, was geschrieben wird.
+- Ein **„Duplicate"-Button** je zugewiesener Karte ist die Ergonomie-Abkürzung für den Einzelfall: Er übernimmt Name, Abspielmodus/Dateien bzw. Stream-URL unverändert in eine neue, unabhängige Zuweisung für ein anderes (bereits bekanntes) ESPuino — spart das manuelle Nachbauen der Konfiguration, wenn dieselbe Karte auf einem zweiten Gerät genauso funktionieren soll.
 
 **Geräte-Alias-Liste.** Die vom ESPuino gesendete `espId` ist vermutlich MAC-Adresse oder Hostname — für Menschen nicht schön lesbar. Der Hub führt daher pro Gerät ein optionales, frei vergebbares **Alias** (z. B. „Kinderzimmer"), gepflegt auf der Geräte-Seite. Das Alias ist reine Anzeige-Ergonomie im Hub-UI (Dropdown, Kartenliste) und hat keine Wirkung auf Protokoll oder NVS.
 
@@ -155,6 +161,7 @@ Ein Manifest-Request beim Auflegen dient zugleich der **Registrierung** (§5.3):
   "schema": 1,
   "cardId": "012345678901",
   "version": "9f86d081884c7d65...",
+  "forceEpoch": 0,
   "name": "Benjamin Blümchen – Folge 12",
   "playMode": 3,
   "filesBaseUrl": "http://192.168.1.50:8080/media/",
@@ -172,6 +179,7 @@ Ein Manifest-Request beim Auflegen dient zugleich der **Registrierung** (§5.3):
 | `schema` | Format-Version für Vorwärtskompatibilität. |
 | `cardId` | Gegenprüfung, dass das Manifest zur aufgelegten Karte gehört. |
 | `version` | **Opaker Änderungsstempel = SHA-256 des kanonischen Manifests, berechnet auf dem Hub.** Der ESPuino rechnet hier nichts, er **vergleicht nur Strings**. Grundlage der Änderungserkennung. Da es ein Content-Hash ist, kann der Hub das „Hochzählen" nicht vergessen. |
+| `forceEpoch` | Zähler, den „Force Refresh" im Hub-UI hochzählt (§9). Er geht in `version` ein, steht aber zusätzlich sichtbar im Manifest, weil der ESPuino einen Force Refresh von einer gewöhnlichen Inhaltsänderung unterscheiden muss: Beim Re-Sync behält er unveränderte Dateien (§10), und nur ein hochgezählter Epoch darf eine lokale Kopie verwerfen, die noch zum Manifest passt. In den `version`-Hash geht er unter einem internen Namen ein — das sichtbare Feld bleibt draußen, sonst hätte allein seine Einführung jede Karte einmal „stale" gemacht. |
 | `name` | Optional, nur für Logs/Web-UI. |
 | `playMode` | ESPuino-`playMode`-Enum (`values.h`), z. B. 3 = Hörbuch. **Quelle der Wahrheit ist der Hub.** |
 | `filesBaseUrl` | Download-Basis. Download-URL je Datei = `filesBaseUrl + path`. Entkoppelt Medien-Ablage vom Manifest — auf dem Hub identisch für alle Karten, da `path` relativ zur Wurzel der (eingebundenen) Medienbibliothek ist, nicht mehr pro Karte isoliert (§5.4). |
@@ -196,7 +204,7 @@ Trägt eine Karte einen Webradio-Sender, gibt es **keine Dateien** herunterzulad
 }
 ```
 
-- Kein `target`, kein `filesBaseUrl`, kein `files`.
+- Kein `target`, kein `filesBaseUrl`, kein `files`. (`forceEpoch` liefert der Hub auch hier mit, es bleibt bei einer Webradio-Karte aber folgenlos — es gibt nichts zu verwerfen.)
 - ESPuino liest das Manifest, erkennt `playMode = WEBSTREAM` und übergibt dem AudioPlayer direkt die `stream`-URL — kein Download, keine Integritätsprüfung.
 - Die `version`-/Änderungslogik gilt weiterhin (die Stream-URL kann sich zentral ändern).
 - **Offline nicht abspielbar** — Webradio braucht prinzipbedingt Netz.
@@ -231,9 +239,10 @@ Die Hörbuch-Modi (`AUDIOBOOK`, `AUDIOBOOK_LOOP`, `AUDIOBOOK_RECURSIVE`) merken 
 - **Lokaler Integritätscheck:** ausschließlich über **Dateigröße**. Schnell, kein Hashing großer Dateien.
 - **Download-Verifikation:** SHA-256 **inkrementell** während des Downloads gegen `files[].sha256`. Fängt abgeschnittene/korrupte Downloads ab, die zufällig die richtige Größe hätten.
 - **Änderungserkennung:** über `version`. Der Hintergrund-Check nach dem Start vergleicht die lokal gecachte `version` mit dem frisch geholten Manifest. Weicht sie ab, wird die Karte als **„stale" markiert** — das Update passiert **beim nächsten Auflegen** (§11), nicht mitten in der Wiedergabe.
-- **Force Refresh (Escape-Hatch):** ignoriert den lokalen Zustand und lädt neu — deckt die bewusste Schwäche des Größen-Checks ab (gleiche Größe, anderer Inhalt). Technisch: gecachte `version` (und optional die lokalen Dateien) verwerfen → normaler Download-Pfad greift.
+- **Force Refresh (Escape-Hatch):** ignoriert den lokalen Zustand und lädt die Karte vollständig neu. Er ist die einzige Ansage, die der Hub über die *lokale* Kopie machen kann — ein Manifest beschreibt immer nur, was richtig wäre, nie was tatsächlich auf der SD-Karte liegt. Deshalb deckt er ab, was keine der beiden Prüfungen oben fängt: zerkratzte Karte, von Hand verändertes File, gleiche Größe bei anderem Inhalt.
   - **pro Karte** (Button im Hub-UI / Admin-Karte)
-  - **für alle Karten** (alle gecachten `version`-Werte verwerfen → jede Karte lädt beim nächsten Auflegen neu)
+  - **für alle Karten** (ein Button im Hub-UI)
+  - Technisch zählt der Hub den `forceEpoch` der betroffenen Karten hoch (§7.1). Dadurch ändert sich `version`, die Karte wird „stale" — und weil der ESPuino den Epoch des neuen Manifests mit dem des gecachten vergleicht, erkennt er den Unterschied zu einer gewöhnlichen Inhaltsänderung und leert den Ordner, statt unveränderte Dateien zu behalten (§10).
 
 ## 10. Kernoperation `MediaHub_EnsureCard`
 
@@ -252,7 +261,15 @@ MediaHub_EnsureCard(cardId, {showProgress}):
 
     mediaDir ← /.mediahub/media/<cardId>/
     wenn Karte als "stale" markiert:
-        mediaDir komplett leeren            // Wipe → sauberer Neuaufbau
+        laufende Wiedergabe stoppen          // sonst kämpft sie mit dem Download um SD und CPU
+        wenn forceEpoch geändert oder kein gecachtes Manifest:
+            mediaDir komplett leeren         // Force Refresh bzw. kein Vergleichsmaßstab
+        sonst:
+            je Pfad des gecachten Manifests:
+                Pfad fehlt im neuen Manifest        → löschen
+                sha256 weicht vom neuen Manifest ab → löschen
+                sonst                               → behalten
+            alles, was nicht behalten wird, vorab löschen   // s. u.
 
     fehlend ← alle files, deren lokale Datei fehlt oder deren Größe ≠ manifest.size
     wenn fehlend leer:
@@ -270,8 +287,15 @@ MediaHub_EnsureCard(cardId, {showProgress}):
     return BEREIT
 ```
 
+**Warum beim Re-Sync nur die Differenz wandert.** Ursprünglich wurde der Ordner pauschal geleert; das war zugleich der Aufräummechanismus für verwaiste Dateien (§13.1), hatte aber den Preis, dass eine zusätzliche Datei in einem 150-MB-Hörbuch alle 150 MB erneut über die Leitung schickte. Der Vergleich kostet nichts: Der `sha256` je Datei steht sowohl im frisch geholten als auch im gecachten Manifest, beide liegen ohnehin vor. **Auf dem ESP32 wird dafür nichts gehasht** — das verbietet Grundprinzip 3, und ein 100-MB-File neu zu lesen wäre teurer als es zu holen. Der Größen-Check bleibt als billiges Netz gegen eine zwischenzeitlich abgeschnittene Kopie.
+
+Zwei Feinheiten, die dazugehören:
+
+- Was aus dem Manifest verschwindet, **muss** verschwinden — das ist keine Kosmetik: Ein ordnerbasierter Abspielmodus spielt, was im Verzeichnis liegt, nicht was im Manifest steht. Eine gelöschte Datei liefe sonst ewig weiter mit. Genau diese Pflicht erfüllte früher das pauschale Leeren.
+- Was nicht behalten wird, wird **vor** dem Download gelöscht. Der Fehlend-Check oben entscheidet nur über die Größe und würde eine veraltete Datei überspringen, die zufällig die richtige Länge hat.
+
 - **Vordergrund (beim Auflegen):** `EnsureCard(card, showProgress=true)`; bei `BEREIT` folgt die Wiedergabe.
-- **Danach:** ein **leichter Hintergrund-`version`-Check** (nur Manifest holen + vergleichen, kein Download). Bei Änderung → Karte „stale" markieren; das eigentliche Update macht der **nächste** Auflege-Vorgang (Wipe + Neuladen).
+- **Danach:** ein **leichter Hintergrund-`version`-Check** (nur Manifest holen + vergleichen, kein Download). Bei Änderung → Karte „stale" markieren; das eigentliche Update macht der **nächste** Auflege-Vorgang.
 
 ## 11. Ablauf beim Kartenauflegen (Mechanismus a)
 
@@ -283,7 +307,7 @@ flowchart TD
     C -- ja --> D{playMode = MEDIAHUB?}
     D -- nein --> P[Normale Wiedergabe wie heute<br/>SD-Pfad / Webradio / Modifikation]
     D -- ja --> ST{Karte "stale"<br/>und Hub erreichbar?}
-    ST -- ja --> RS[Re-Sync im Vordergrund:<br/>neues Manifest, Ordner wipen,<br/>neu laden, Ring-Fortschritt]
+    ST -- ja --> RS[Re-Sync im Vordergrund:<br/>neues Manifest, Wiedergabe stoppen,<br/>Unverändertes behalten, Differenz laden,<br/>Ring-Fortschritt]
     RS --> PLAY
     ST -- nein --> E[Manifest bestimmen<br/>Cache: /.mediahub/manifests/cardId.json]
     E --> F{Cache<br/>vorhanden?}
@@ -310,7 +334,7 @@ flowchart TD
 
 1. Karte → `cardId`. NVS-Lookup (sofort, lokal).
 2. Kein `MEDIAHUB`-playMode → alles wie bisher (SD, Webradio, Modifikation).
-3. `MEDIAHUB` + Karte „stale" & Hub erreichbar → **Vordergrund-Re-Sync** (neues Manifest, Ordner wipen, neu laden), dann neue Version spielen.
+3. `MEDIAHUB` + Karte „stale" & Hub erreichbar → **Vordergrund-Re-Sync** (neues Manifest, laufende Wiedergabe stoppen, Unverändertes behalten, nur die Differenz laden), dann neue Version spielen.
 4. Sonst: Manifest aus Cache (oder, falls fehlend und Hub erreichbar, einmalig laden).
 5. Alle Dateien lokal & Größen passen → **sofort spielen** (offline-tauglich).
 6. Sonst & Hub erreichbar → **Vordergrund-Download** mit Ring-Fortschritt, danach spielen.
@@ -318,6 +342,15 @@ flowchart TD
 8. Nach dem Start: **Hintergrund-`version`-Check** (nur prüfen); bei Änderung Karte „stale" markieren → Update beim nächsten Auflegen.
 
 Der „PLAY"-Schritt ruft `AudioPlayer_SetPlaylist()` mit dem **echten** `playMode` aus dem Manifest sowie den beim NVS-Lookup (Schritt 1) bereits gelesenen `lastPlayPos`/`trackLastPlayed` auf — Details und der dafür nötige Fix in `AudioPlayer_NvsRfidWriteWrapper()` siehe §8.1.
+
+**Wiedergabe rund um den Re-Sync.** Das Auflegen einer Karte beendet für sich genommen keine laufende Wiedergabe — die Dispatch-Weiche in `RfidCommon.cpp` reicht nur weiter, gestoppt wird sonst erst durch das Setzen einer neuen Playlist. Beim Re-Sync passiert das aber erst am Ende, sodass die alte Karte sonst durch den gesamten Download weiterliefe und mit ihm um SD-Zugriffe und Rechenzeit konkurrierte (gemessen: rund 480 statt 710 kB/s), während das Web-Interface unverändert ihr Cover und ihre Titelzahl zeigte. Der Re-Sync stoppt deshalb selbst — allerdings erst **nach** dem Manifest-Abruf und dessen Prüfungen, denn ein nicht erreichbarer Hub darf niemanden seine Wiedergabe kosten (§14).
+
+Zwei Dinge gehören zu diesem Stopp:
+
+- Das Kommando an den AudioPlayer wird nur geparkt; abgearbeitet wird es von einer Schleife, die in **derselben** Task läuft wie der Re-Sync selbst. Sie kommt also erst wieder dran, wenn der Download zurückgekehrt ist — der Stopp träfe dann die gerade gestartete neue Playlist. Die Schleife muss daher einmal von Hand angestoßen werden. Warten wäre das Falsche: Es würde verklemmen.
+- Gestoppt wird nur, wenn tatsächlich etwas läuft. Ein Track-Kommando auf eine beendete Playlist quittiert der AudioPlayer mit einer Fehleranzeige.
+
+**Nach dem Re-Sync wird sofort gespielt.** Ursprünglich war das umgekehrt umgesetzt — der Re-Sync-Tap spielte nicht, man musste ein drittes Mal auflegen. Begründet war das damit, dass ein Re-Sync Minuten dauern konnte und unvermittelt einsetzender Ton nach so langer Stille mehr erschreckte als half. Beide Hälften dieser Begründung sind entfallen: Es wandert nur noch die Differenz, und die Stille ist jetzt eine, die der Re-Sync selbst erzeugt hat. Damit ist die Karte nach **zwei** Auflegevorgängen aktuell (erster: alter Stand spielt, Änderung wird erkannt; zweiter: Differenz laden, neuer Stand spielt).
 
 ## 12. LED / Fortschritt
 
@@ -328,9 +361,10 @@ Der Download-Fortschritt wird auf dem Neopixel-Ring angezeigt. **Wichtig:** Nich
 - Der Karten-Ordner `/.mediahub/media/<cardId>/` wird bei Bedarf angelegt.
 - Jede Datei wird nach `…/<path>.tmp` geladen und erst nach erfolgreicher SHA-Prüfung per Rename an den endgültigen Ort verschoben.
 - Abbruch/Fehler (Netzwerk weg, Hub-Fehler, SD-Fehler) → `.tmp` entfernen, klare Fehlermeldung, kein Zombie-File.
-- **SD-Platz vorab prüfen** (frei = `totalBytes − usedBytes`, gegen die Summe der `files[].size`): frischer Download nur, wenn `frei ≥ benötigt`. Beim **Re-Sync erst prüfen, dann wipen** — `frei + alte_Ordnergröße ≥ benötigt`; passt es nicht, wird **nicht gewiped** (die alte, funktionierende Version bleibt) und ein „SD voll"-Fehler angezeigt.
-- **Re-Sync (stale-Karte):** der Ordner wird geleert und neu befüllt. Bricht das ab, bleibt die Karte **„needs resync"** markiert → der nächste Tap versucht es erneut. (Ehrlicher Preis der Wipe-Strategie: bis dahin ist die Karte ggf. unvollständig.)
+- **SD-Platz vorab prüfen** (frei = `totalBytes − usedBytes`): frischer Download nur, wenn `frei ≥ benötigt`. Beim **Re-Sync erst prüfen, dann löschen** — `frei + was gelöscht wird ≥ was geladen werden muss`. Beide Zahlen ergeben sich aus dem Vergleich der zwei Manifeste und stehen damit fest, bevor die erste Datei fällt; passt es nicht, wird **nichts** gelöscht (die alte, funktionierende Version bleibt vollständig) und ein „SD voll"-Fehler angezeigt.
+- **Re-Sync (stale-Karte):** Unverändertes bleibt liegen, der Rest wird ersetzt (§10). Bricht das ab, bleibt die Karte **„needs resync"** markiert → der nächste Tap versucht es erneut, und zwar **dort, wo es aufhörte**: Was den Abgleich überlebt hat, erkennt der Fehlend-Check als vorhanden. Ein unterbrochener Re-Sync fängt nicht von vorn an.
 - Kurze Connect-Timeouts (schnelles Scheitern), damit ein unerreichbarer Hub nie hängt.
+- **Die JSON-DB des Hubs wird von mehreren Prozessen beschrieben.** Der Container fährt mehrere gunicorn-Worker; eine prozesslokale Sperre reicht dafür nicht. Jedes Lesen-Ändern-Schreiben läuft deshalb unter einem `flock` auf einer Sperrdatei, und die Temporärdatei trägt die Prozess-ID im Namen — ohne beides benannten zwei Worker dieselbe Temporärdatei, der eine benannte sie um, der andere schrieb in die bereits veröffentlichte Datenbank weiter und scheiterte danach am eigenen Rename. Ergebnis war ein stillschweigend verlorener oder ein beschädigter Datenstand. Zusätzlich schreibt ein Mutationsvorgang gar nicht erst, wenn er nichts geändert hat. (Gemeldet in [forum #4813](https://forum.espuino.de/t/mediahub-container-stuerzt-beim-start-ab-wettlauf-der-gunicorn-worker-um-db-json-tmp/4813).)
 - **https-Downloads brauchen internen Heap zum richtigen Zeitpunkt, nicht dauerhaft.** Ein TLS-Handshake braucht auf dem ESP32 ~32-40 KB zusammenhängenden *internen* Heap für die festen Ein-/Ausgabepuffer (`CONFIG_MBEDTLS_SSL_VARIABLE_BUFFER_LENGTH` ist aus). Die beiden 16-KB-Doppelpuffer des Downloadpfads dürfen deshalb **nicht dauerhaft** im internen RAM liegen (das hat auf echter Hardware reproduzierbar dazu geführt, dass der Datei-Download über https mit `HTTPC_ERROR_CONNECTION_REFUSED` scheiterte, obwohl der - kleinere - Manifest-Abruf über https klappte). Lösung: Puffer werden **nach** erfolgreichem Handshake alloziert und **vor** dem nächsten Datei-Handshake wieder freigegeben — PSRAM ist nur ein Notfall-Fallback, nie die Standardwahl (SPI-angebunden, spürbar langsamer; hätte die ~700 kB/s Downloadrate aus §17/Phase 4 wieder zunichtegemacht). Auf echter Hardware bestätigt: der interne Heap fragmentiert durch das Alloc/Free-pro-Datei-Muster nicht spürbar über mehrere Dateien hinweg.
 - **https ist spürbar langsamer als http** (auf echter Hardware ~300 statt ~650-700 kB/s) — erwarteter, hinzunehmender TLS-Overhead (laufende Record-Entschlüsselung/MAC-Prüfung pro Byte, trotz Hardware-AES/-SHA; zusätzlich ein eigener Handshake pro Datei, da keine Connection-Wiederverwendung über einen ganzen Sync-Vorgang hinweg stattfindet). Kein Bug, keine Fehlkonfiguration.
 
@@ -356,7 +390,7 @@ Ein Code-Pfad für beide Auslöser: Der **Nutzer** löscht die Karte im ESPuino-
 - **lazy delete:** Der Hub löscht nur seinen eigenen Eintrag. Der ESPuino bleibt unangetastet — die Karte lebt lokal weiter (spielt aus dem Cache, auch offline). Konsequenz: Bei einem späteren Online-Tap kennt der Hub sie nicht mehr → sie registriert sich als neue/pending Karte (für einen Soft-Delete akzeptiert).
 - **secure delete:** Der Hub ruft `DELETE /rfid?id=<cardId>` auf **dem in der Zuweisung hinterlegten ESPuino** (§5.5) an und löscht seinen eigenen Eintrag **erst nach einer 200**. Zwei-Phasen → konsistent; scheitert der Call, behält der Hub seinen Eintrag und versucht es erneut. Da die Zuweisung ihr Gerät direkt kennt (statt es aus „zuletzt gesehen" zu erraten), ist auch bei mehreren ESPuinos pro Karte immer klar, welches genau angerufen wird.
 
-**Aufräumen bei Inhaltsänderung.** Ein Content-Update räumt implizit auf: Beim Re-Sync (nächstes Auflegen einer „stale"-Karte, §11) wird `/.mediahub/media/<cardId>/` **geleert und neu befüllt** — verwaiste Dateien verschwinden dabei automatisch.
+**Aufräumen bei Inhaltsänderung.** Ein Content-Update räumt weiterhin auf, nur gezielt statt pauschal: Beim Re-Sync (nächstes Auflegen einer „stale"-Karte, §11) vergleicht der ESPuino das neue Manifest mit dem gecachten und entfernt aus `/.mediahub/media/<cardId>/` genau die Dateien, die das neue nicht mehr nennt oder mit anderem Inhalt nennt (§10). Dazu kommen `.tmp`-Reste abgebrochener Downloads und leer gewordene Unterordner. Für den Fall, dass gar kein gecachtes Manifest vorliegt — es also keinen Maßstab gibt, was dort unten liegen sollte —, bleibt das vollständige Leeren der Weg; dasselbe gilt für Force Refresh (§9).
 
 ## 14. Offline- & Fehlerverhalten
 
@@ -369,7 +403,7 @@ Ein Code-Pfad für beide Auslöser: Der **Nutzer** löscht die Karte im ESPuino-
 
 **Hub erreichbar, aber Karte (noch) nicht zugewiesen:**
 
-- Der Hub registriert die Karte (§5.3) und antwortet negativ → **Fehleranzeige**. Für den Bediener bedeutet das „neue / noch nicht eingerichtete Karte".
+- Der Hub registriert die Karte (§5.3) und antwortet negativ → **Fehleranzeige**. Für den Bediener bedeutet das „neue / noch nicht eingerichtete Karte". Ist die Übernahme unbekannter Karten eingeschaltet (§5.3), fragt der ESPuino vorher noch seine übrigen registrierten Server; erst wenn keiner die Karte kennt, bleibt es bei der Fehleranzeige.
 - **Kein Löschen bei Einzel-Fehler:** Ein einzelner Negativ-/404-Response löscht **nie** lokale Dateien oder den NVS-Eintrag. Entfernt wird nur durch eine **bewusste Aktion** (`DELETE /rfid` — manuell im Web-UI oder vom Hub, §13.1). (Gilt auch für den Hintergrund-`version`-Check.)
 
 **Während eines laufenden Downloads:**
@@ -378,7 +412,8 @@ Ein Code-Pfad für beide Auslöser: Der **Nutzer** löscht die Karte im ESPuino-
 
 ## 15. Offene Punkte / später
 
-- Keine offenen **Konzept**-Fragen mehr. Verbleibende Details (LED-Fehlermuster, Web-UI-Status-Texte, genaue „needs resync"-Retry-Politik) klären sich bei der Umsetzung.
+- Keine offenen **Konzept**-Fragen mehr; die Umsetzung ist auf beiden Seiten erfolgt.
+- Bewusst offen gelassen: Webradio-Karten durchlaufen den Re-Sync, ohne dass dabei gestoppt oder anschließend gespielt wird (§11) — dasselbe Muster, aber ohne das Bandbreitenproblem. Die Abspielmodi „Zufälliger Unterordner" (13/14) sind in §5.4 nicht einsortiert und vermutlich bei flacher Auswahl ebenso wirkungslos. Und ob eine geänderte Dateiliste die gespeicherte Hörbuch-Position verschieben darf, ist nicht entschieden: Kommt vorn eine Datei dazu, zeigt der gespeicherte Track-Index auf einen anderen Titel.
 
 ## 16. Entscheidungslog
 
@@ -406,18 +441,25 @@ Ein Code-Pfad für beide Auslöser: Der **Nutzer** löscht die Karte im ESPuino-
 | 20 | Speicher-Layout Option B: Medien unter `/.mediahub/media/<cardId>/`, Cache unter `/.mediahub/manifests/`. `target` entfällt — die Ablage bestimmt der ESPuino. |
 | 21 | Löschen via `DELETE /rfid?id=X`-Cascade (MEDIAHUB-gated: NVS + Medien + Cache; 200 nur bei vollem Erfolg). Kein `action`-Feld im Manifest. |
 | 22 | Hub-Config: **lazy** (nur Hub-Eintrag) vs. **secure** (zwei-Phasen: erst `DELETE /rfid`, Hub-Eintrag erst nach 200). |
-| 23 | Change-Handling = Lazy Update beim nächsten Auflegen (stale-Markierung; Wipe + Neuladen erst beim nächsten Tap → Resync braucht 2× Auflegen). |
-| 24 | SD-Platz wird vor dem Download geprüft (frisch: `frei ≥ benötigt`; Re-Sync: erst prüfen `frei + alt ≥ benötigt`, dann wipen — sonst alte Version behalten). |
+| 23 | Change-Handling = Lazy Update beim nächsten Auflegen (stale-Markierung; das Update erst beim nächsten Tap → eine Änderung ist nach 2× Auflegen aktiv). |
+| 24 | SD-Platz wird vor dem Download geprüft (frisch: `frei ≥ benötigt`; Re-Sync: erst prüfen `frei + was gelöscht wird ≥ was geladen wird`, dann löschen — sonst alte Version unangetastet behalten). |
 | 25 | Hub-Web-UI optional per Passwort absicherbar (Settings, gehashter Wert in der JSON-DB). Betrifft nur die Verwaltungsoberfläche — die ESPuino-Endpunkte (§6) bleiben immer offen (§19). |
 | 26 | Karten-Zuweisung über eine read-only in den Container gemountete Medienbibliothek (`/media`) statt Datei-Upload; Auswahl per eingebettetem Datei-Browser (§5.4). Löschen einer Zuweisung fasst nie die Bibliotheksdateien an — der Hub referenziert sie nur. |
 | 27 | **Zuweisungs-Schlüssel ist (espId, cardId), nicht cardId allein** (§5.5) — dieselbe Karte kann pro ESPuino unabhängig konfiguriert werden. Löst die Mehrdeutigkeit bei Secure Delete: Vorher rief der Hub das „zuletzt gesehene" Gerät zur Karte an (falsch/unvollständig bei mehreren ESPuinos pro Karte); jetzt kennt jede Zuweisung ihr Gerät direkt. |
 | 28 | Geräte-Alias-Liste im Hub (frei vergebbarer Name je `espId`, z. B. „Kinderzimmer") — reine Anzeige-Ergonomie, da die vom ESPuino gesendete `espId` (MAC/Hostname) für Menschen unhandlich ist. Gerät im Hub-UI löschbar; bestehende Zuweisungen dieses Geräts werden dabei nach Bestätigung mit gelöscht (nur der Hub-Datensatz, nie ESPuino/NVS). |
 | 29 | **Play-Position-Persistenz (§8.1):** NVS-Format korrigiert auf die tatsächlichen vier Felder `path#lastPlayPos#playMode#trackLastPlayed`. `AudioPlayer_NvsRfidWriteWrapper()` muss bei einem `mediahub://`-Pfad das `playMode`-Feld beim Zurückschreiben immer auf `MEDIAHUB` erzwingen (statt des echten, gerade abgespielten Modus) — sonst überschreibt der erste Pause-/Trackwechsel-Save den Marker und die Karte wird beim nächsten Auflegen nicht mehr als MediaHub-Karte erkannt. `AudioPlayer_SetPlaylist()` wird beim Abspielen mit dem echten Manifest-`playMode` plus den aus dem NVS gelesenen `lastPlayPos`/`trackLastPlayed` aufgerufen — dadurch greifen `saveLastPlayPosition` und der Shutdown-Flush unverändert, ohne dass AudioPlayer.cpp/System.cpp MediaHub kennen müssen. |
 | 30 | **Downloadpuffer-Lebensdauer an den TLS-Handshake gekoppelt (§13):** Die beiden 16-KB-Doppelpuffer werden pro Datei erst nach erfolgreichem Handshake alloziert (bevorzugt intern, PSRAM nur als Fallback) und nach dem Transfer sofort wieder freigegeben — dauerhafte interne Allokation hätte dem https-Handshake der jeweils nächsten Datei den nötigen zusammenhängenden Heap weggenommen (`HTTPC_ERROR_CONNECTION_REFUSED`, auf echter Hardware reproduziert). |
+| 31 | **Re-Sync lädt nur die Differenz (§10).** Das pauschale Leeren des Kartenordners wich einem Abgleich der `sha256`-Werte aus neuem und gecachtem Manifest — zwei Zeichenketten, die ohnehin vorliegen, also kein Hashing auf dem ESP32 (Grundprinzip 3 bleibt unangetastet). Verwaiste Dateien werden weiterhin entfernt, nur gezielt. Fehlt das gecachte Manifest, bleibt es beim vollständigen Leeren. |
+| 32 | **`forceEpoch` steht sichtbar im Manifest (§7.1).** Ein Force Refresh ändert sonst nichts, was der Abgleich aus #31 sehen könnte — er bliebe wirkungslos, und zwar im einzigen Fall, in dem die lokale Kopie wirklich weg muss. In den `version`-Hash geht der Wert weiter unter internem Namen ein, damit die Einführung des Feldes nicht jede bestehende Karte einmal „stale" macht. |
+| 33 | **Der Re-Sync stoppt die laufende Wiedergabe und spielt danach selbst (§11).** Die alte Karte lief sonst durch den ganzen Download weiter und konkurrierte mit ihm (480 statt 710 kB/s), während das Web-Interface ihren Stand zeigte. Gestoppt wird erst nach dem Manifest-Abruf — ein unerreichbarer Hub darf keine Wiedergabe kosten. Und weil die Stille damit selbst verursacht ist, entfällt die frühere Regel „Re-Sync-Tap spielt nicht": Die ursprüngliche Konzeptabfolge RS → PLAY gilt wieder. |
+| 34 | **Nicht-rekursive Ordner-Modi akzeptieren nur Dateien aus einem einzigen Ordner (§5.4).** Der ESPuino bekommt einen Ordner übergeben, keine Dateiliste; eine über mehrere Ordner verteilte Auswahl ergibt dort nichts Abspielbares. Der Hub verhindert die Kombination im Datei-Browser und beim Speichern. Die Modi „Zufälliger Unterordner" sind bewusst nicht einsortiert — sie brauchen die umgekehrte Bedingung. |
+| 35 | **Eine Karte lässt sich in einem Speichervorgang mehreren ESPuinos zuweisen (§5.5).** Ankreuzfelder im Zuweisungsformular statt mehrfachem „Duplicate". Ein Häkchen zu entfernen löscht nie — Löschen bleibt der ausdrücklichen Aktion vorbehalten, weil es `DELETE /rfid` auf dem Gerät auslösen kann. |
+| 36 | **Ein ESPuino darf eine ihm unbekannte Karte bei seinen registrierten Hubs erfragen und übernehmen (§5.3).** Spart das Anlernen an jedem weiteren Gerät. Standardmäßig aus. |
+| 37 | **Die JSON-DB wird prozessübergreifend gesperrt (§13).** `flock` plus prozess-eindeutiger Temporärdateiname; mehrere gunicorn-Worker zerstörten sich sonst gegenseitig den Schreibvorgang. |
 
 ## 17. Implementierungsplan ESPuino-Seite (Phasen)
 
-Der Hub (`mediahub/`) ist implementiert und getestet (§15). Für die Firmware-Seite folgt die Umsetzung in Phasen, aufsteigend nach Abhängigkeiten sortiert — jede Phase soll für sich testbar/demofähig sein, bevor die nächste draufkommt.
+**Abgeschlossen.** Die Firmware-Seite ist seit Version 3.1 im Release; der Abschnitt bleibt als Protokoll stehen, weil die Reihenfolge und ihre Begründungen erklären, warum der Code so aufgebaut ist. Spätere Ergänzungen (§10 Differenz-Sync, §5.3 Übernahme unbekannter Karten, §5.5 Mehrfachzuweisung) sind nicht Teil dieses Plans, sondern kamen danach.
 
 ### Phase 0 — Fundament & Dispatch-Weiche
 
@@ -456,7 +498,7 @@ Der Hub (`mediahub/`) ist implementiert und getestet (§15). Für die Firmware-S
 ### Phase 6 — Änderungserkennung & Re-Sync
 
 - Hintergrund-`version`-Check nach Wiedergabestart, „stale"-Markierung (§9)
-- Re-Sync-Ablauf beim nächsten Auflegen (SD-Platz-Check → wipen → neu laden, §13/§13.1)
+- Re-Sync-Ablauf beim nächsten Auflegen (SD-Platz-Check → aufräumen → Differenz laden, §13/§13.1). Ursprünglich wurde hier der Kartenordner pauschal geleert; der Abgleich kam später dazu (#31).
 
 ### Phase 7 — Löschen-Kaskade
 
