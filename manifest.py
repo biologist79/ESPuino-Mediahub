@@ -4,8 +4,14 @@ Per the concept, `version` is an "opaque change stamp = SHA-256 of the
 canonical manifest, computed on the hub" — the ESPuino only ever compares
 strings. We therefore hash on every request (manifests are tiny, this
 costs nothing) rather than carrying a cached value that could go stale.
-`force_epoch` feeds into the hash but never into the output — that's the
-"force refresh" lever from §9: content unchanged, hash still new.
+`force_epoch` is the "force refresh" lever from §9: content unchanged, hash
+still new. It is hashed under a private name and additionally published as
+`forceEpoch`, because the ESPuino has to be able to tell a force refresh
+from an ordinary edit: it keeps the files the hub did not change instead of
+re-downloading the whole card (forum #4607), so only a bumped epoch may
+discard a local copy that still matches the manifest. Hashing the published
+field as well would alter every card's version once and trigger a pointless
+full re-sync everywhere, so it stays out of the hashed body.
 """
 
 import hashlib
@@ -120,8 +126,9 @@ def build_manifest(card_id, card, files_base_url):
             ],
         }
 
+    force_epoch = card.get("force_epoch", 0)
     hashed = dict(body)
-    hashed["_forceEpoch"] = card.get("force_epoch", 0)
+    hashed["_forceEpoch"] = force_epoch
     version = hashlib.sha256(_canonical_json(hashed)).hexdigest()
 
-    return {"version": version, **body}
+    return {"version": version, "forceEpoch": force_epoch, **body}
