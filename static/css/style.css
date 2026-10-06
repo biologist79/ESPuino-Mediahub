@@ -317,6 +317,10 @@ main.container {
 	color: var(--brand-dark);
 }
 
+#selected-files-warning {
+	margin-top: 8px;
+}
+
 .live-banner {
 	display: flex;
 	align-items: center;

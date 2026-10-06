@@ -747,3 +747,22 @@ msgstr ""
 msgid "Remove password"
 msgstr ""
 
+#: app.py:470
+msgid ""
+"This play mode plays a single folder, but the selected files lie in "
+"%(num)s different ones. Choose a recursive play mode, or pick files from "
+"one folder only."
+msgstr ""
+
+#: templates/card_form.html:71
+msgid ""
+"This play mode plays a single folder, so files from another one can't be "
+"added. Pick a recursive play mode to combine folders."
+msgstr ""
+
+#: templates/card_form.html:72
+msgid ""
+"The selected files lie in several folders, but this play mode plays only "
+"one — the ESPuino would find nothing to play. Pick a recursive play mode, "
+"or keep files from a single folder."
+msgstr ""

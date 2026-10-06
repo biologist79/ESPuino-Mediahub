@@ -6,6 +6,7 @@ See ../mediahub-konzept.md for the full specification.
 
 import json
 import os
+import posixpath
 
 from flask import (
     Flask,
@@ -459,6 +460,23 @@ def assign_card(esp_id, card_id):
                 flash(_("This play mode only supports a single file — please select just one."), "error")
                 return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
 
+            # The ESPuino is handed a folder, not a file list (see
+            # SINGLE_FOLDER_PLAY_MODES): with files from several folders these
+            # modes find nothing to play at all. The browser already refuses
+            # the combination, but a form can be submitted without it.
+            folders = {posixpath.dirname(f["path"]) for f in files}
+            if play_mode in manifest_lib.SINGLE_FOLDER_PLAY_MODES and len(folders) > 1:
+                flash(
+                    _(
+                        "This play mode plays a single folder, but the selected files "
+                        "lie in %(num)s different ones. Choose a recursive play mode, "
+                        "or pick files from one folder only.",
+                        num=len(folders),
+                    ),
+                    "error",
+                )
+                return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
+
             files.sort(key=lambda f: f["path"])
             payload = (name, "files", play_mode, None, files)
 
@@ -487,6 +505,7 @@ def assign_card(esp_id, card_id):
         play_modes=manifest_lib.FILE_PLAY_MODES,
         single_file_play_modes=list(manifest_lib.SINGLE_FILE_PLAY_MODES),
         recursive_play_modes=list(manifest_lib.RECURSIVE_PLAY_MODES),
+        single_folder_play_modes=list(manifest_lib.SINGLE_FOLDER_PLAY_MODES),
     )
 
 

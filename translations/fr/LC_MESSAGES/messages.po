@@ -836,3 +836,33 @@ msgstr "Supprimer le mot de passe"
 #~ msgid "unknown"
 #~ msgstr "inconnu"
 
+#: app.py:470
+msgid ""
+"This play mode plays a single folder, but the selected files lie in "
+"%(num)s different ones. Choose a recursive play mode, or pick files from "
+"one folder only."
+msgstr ""
+"Ce mode de lecture ne lit qu'un seul dossier, mais les fichiers "
+"sélectionnés se trouvent dans %(num)s dossiers différents. Choisissez un "
+"mode de lecture récursif, ou ne sélectionnez que des fichiers d'un seul "
+"dossier."
+
+#: templates/card_form.html:71
+msgid ""
+"This play mode plays a single folder, so files from another one can't be "
+"added. Pick a recursive play mode to combine folders."
+msgstr ""
+"Ce mode de lecture ne lit qu'un seul dossier : les fichiers d'un autre "
+"dossier ne peuvent pas être ajoutés. Choisissez un mode de lecture "
+"récursif pour combiner des dossiers."
+
+#: templates/card_form.html:72
+msgid ""
+"The selected files lie in several folders, but this play mode plays only "
+"one — the ESPuino would find nothing to play. Pick a recursive play mode, "
+"or keep files from a single folder."
+msgstr ""
+"Les fichiers sélectionnés se trouvent dans plusieurs dossiers, mais ce "
+"mode de lecture n'en lit qu'un seul — l'ESPuino ne trouverait rien à lire. "
+"Choisissez un mode de lecture récursif, ou ne conservez que des fichiers "
+"d'un seul dossier."

@@ -35,6 +35,18 @@ SINGLE_FILE_PLAY_MODES = {1, 2}
 # concept/settings) instead of just the folder's direct children.
 RECURSIVE_PLAY_MODES = {15, 16, 17}
 
+# AUDIOBOOK / AUDIOBOOK_LOOP / ALL_TRACKS_OF_DIR_* / SINGLE_TRACK_OF_DIR_RANDOM
+# (values.h) scan exactly one folder and do not descend. The ESPuino is never
+# handed a file list: it gets the folder the selected files share and plays
+# what lies directly in it. A selection spread over several folders therefore
+# has no folder to hand over - the device falls back to the card's media root,
+# finds only subfolders in it and plays nothing at all, with "no mp3 files in
+# directory" as the only hint (forum #4607). The assignment UI and its
+# server-side validation use this to keep that combination from being saved.
+# RANDOM_SUBDIRECTORY_OF_DIRECTORY (13/14) is deliberately not in here: those
+# want subfolders to pick from, so they need their own rule.
+SINGLE_FOLDER_PLAY_MODES = {3, 4, 5, 6, 7, 9, 12}
+
 # The ESPuino always builds a card ID from exactly 4 UID bytes formatted as
 # "%03d" each (see cardIdSize/cardIdStringSize in src/Rfid.h) — always 12
 # decimal digits, never hex.

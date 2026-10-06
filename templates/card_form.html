@@ -45,6 +45,7 @@
 			<span class="form-label">{{ _('Selected files') }}</span>
 			<ul id="selected-files" class="file-list"></ul>
 			<p class="muted" id="selected-files-empty">{{ _('No files selected yet — browse the library below.') }}</p>
+			<p class="flash flash-error" id="selected-files-warning" hidden></p>
 		</div>
 
 		<div class="form-row">
@@ -66,6 +67,9 @@
 				"singleFileOnly": _("This play mode only supports one file — pick a different mode to select more."),
 				"recursivePlayModes": recursive_play_modes,
 				"recursiveHint": _("Includes subfolders too (recursive play mode; depth configurable in Settings)."),
+				"singleFolderModes": single_folder_play_modes,
+				"singleFolderBlocked": _("This play mode plays a single folder, so files from another one can't be added. Pick a recursive play mode to combine folders."),
+				"singleFolderConflict": _("The selected files lie in several folders, but this play mode plays only one — the ESPuino would find nothing to play. Pick a recursive play mode, or keep files from a single folder."),
 				"initialSelection": card.files | map(attribute='path') | list
 			} | tojson }}
 		</script>

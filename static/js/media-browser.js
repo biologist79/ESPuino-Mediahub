@@ -15,10 +15,12 @@
 		var selection = (labels.initialSelection || []).slice();
 		var singleFileModes = (labels.singleFileModes || []).map(String);
 		var recursivePlayModes = (labels.recursivePlayModes || []).map(String);
+		var singleFolderModes = (labels.singleFolderModes || []).map(String);
 		var playModeSelect = document.getElementById("play_mode");
 
 		var selectedListEl = document.getElementById("selected-files");
 		var selectedEmptyEl = document.getElementById("selected-files-empty");
+		var folderWarningEl = document.getElementById("selected-files-warning");
 		var hiddenInput = document.getElementById("selected-paths-json");
 
 		function isSingleFileMode() {
@@ -27,6 +29,48 @@
 
 		function isRecursiveMode() {
 			return !!playModeSelect && recursivePlayModes.indexOf(playModeSelect.value) !== -1;
+		}
+
+		// These play modes hand the ESPuino one folder to scan, not a file list,
+		// so everything selected has to sit in the same one — see
+		// SINGLE_FOLDER_PLAY_MODES in manifest.py.
+		function isSingleFolderMode() {
+			return !!playModeSelect && singleFolderModes.indexOf(playModeSelect.value) !== -1;
+		}
+
+		function folderOf(path) {
+			var cut = path.lastIndexOf("/");
+			return cut === -1 ? "" : path.substring(0, cut);
+		}
+
+		function selectedFolders() {
+			var folders = [];
+			selection.forEach(function (path) {
+				var dir = folderOf(path);
+				if (folders.indexOf(dir) === -1) {
+					folders.push(dir);
+				}
+			});
+			return folders;
+		}
+
+		// `blocked` is set right after an attempt to add a file from a second
+		// folder; the spread-selection warning outranks it, since that one is a
+		// standing problem and not a single refused click.
+		function updateFolderWarning(blocked) {
+			if (!folderWarningEl) {
+				return;
+			}
+			var text = "";
+			if (isSingleFolderMode()) {
+				if (selectedFolders().length > 1) {
+					text = labels.singleFolderConflict;
+				} else if (blocked) {
+					text = labels.singleFolderBlocked;
+				}
+			}
+			folderWarningEl.textContent = text;
+			folderWarningEl.hidden = text === "";
 		}
 
 		function useFolderTitle(disabled) {
@@ -48,6 +92,7 @@
 			hiddenInput.value = JSON.stringify(selection);
 			renderSelectedList();
 			syncCheckboxes();
+			updateFolderWarning(false);
 		}
 
 		function renderSelectedList() {
@@ -90,12 +135,33 @@
 				saveSelection();
 				return;
 			}
+			// In a single-folder mode the first pick fixes the folder; anything
+			// from elsewhere is refused here rather than at save time, so the
+			// tree never shows a selection the ESPuino could not play.
+			var allowedFolder = null;
+			if (isSingleFolderMode()) {
+				var folders = selectedFolders();
+				allowedFolder = folders.length > 0 ? folders[0] : null;
+			}
+			var blocked = false;
 			paths.forEach(function (path) {
-				if (selection.indexOf(path) === -1) {
-					selection.push(path);
+				if (selection.indexOf(path) !== -1) {
+					return;
 				}
+				if (isSingleFolderMode()) {
+					if (allowedFolder === null) {
+						allowedFolder = folderOf(path);
+					} else if (folderOf(path) !== allowedFolder) {
+						blocked = true;
+						return;
+					}
+				}
+				selection.push(path);
 			});
 			saveSelection();
+			if (blocked) {
+				updateFolderWarning(true);
+			}
 		}
 
 		function removePath(path) {
@@ -286,6 +352,7 @@
 					saveSelection();
 				}
 				updateUseFolderButtons();
+				updateFolderWarning(false);
 			});
 		}
 
