@@ -24,6 +24,7 @@
 		var selectedEmptyEl = document.getElementById("selected-files-empty");
 		var folderWarningEl = document.getElementById("selected-files-warning");
 		var clearSelectionBtn = document.getElementById("clear-selection");
+		var selectedCountEl = document.getElementById("selected-count");
 		var hiddenInput = document.getElementById("selected-paths-json");
 
 		function isSingleFileMode() {
@@ -126,6 +127,12 @@
 			// those one × at a time is what this button exists to avoid.
 			if (clearSelectionBtn) {
 				clearSelectionBtn.hidden = selection.length === 0;
+			}
+			// "Use folder" can bring in a few hundred files at once, and the
+			// list is scrollable - the count is the only place the size of the
+			// selection is visible at a glance.
+			if (selectedCountEl) {
+				selectedCountEl.textContent = selection.length > 0 ? " (" + selection.length + ")" : "";
 			}
 			selection.forEach(function (path) {
 				var li = document.createElement("li");

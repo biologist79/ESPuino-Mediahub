@@ -317,6 +317,12 @@ main.container {
 	color: var(--brand-dark);
 }
 
+#selected-count {
+	color: var(--muted);
+	font-weight: 400;
+	font-variant-numeric: tabular-nums;
+}
+
 .form-label-row {
 	display: flex;
 	align-items: center;
