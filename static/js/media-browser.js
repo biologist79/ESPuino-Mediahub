@@ -16,7 +16,9 @@
 		var singleFileModes = (labels.singleFileModes || []).map(String);
 		var recursivePlayModes = (labels.recursivePlayModes || []).map(String);
 		var singleFolderModes = (labels.singleFolderModes || []).map(String);
+		var gatherRecursiveModes = (labels.gatherRecursiveModes || []).map(String);
 		var playModeSelect = document.getElementById("play_mode");
+		var playRootInput = document.getElementById("play-root");
 
 		var selectedListEl = document.getElementById("selected-files");
 		var selectedEmptyEl = document.getElementById("selected-files-empty");
@@ -34,6 +36,26 @@
 		// These play modes hand the ESPuino one folder to scan, not a file list,
 		// so everything selected has to sit in the same one — see
 		// SINGLE_FOLDER_PLAY_MODES in manifest.py.
+		// Whether "use folder" has to reach into subfolders. Not the same as
+		// isRecursiveMode(): "random subfolder" does not descend at playback, it
+		// picks one subfolder and plays that - but those subfolders have to be
+		// in the manifest for it to have anything to pick from.
+		function gathersRecursively() {
+			return !!playModeSelect && gatherRecursiveModes.indexOf(playModeSelect.value) !== -1;
+		}
+
+		// The folder "use folder" was applied to. It travels to the ESPuino,
+		// which plays a folder rather than a file list - without it the device
+		// has to guess the folder back from the paths, and a folder holding a
+		// single subfolder makes that guess land one level too deep. Cleared as
+		// soon as files are picked by hand, because then no single folder is
+		// behind the selection any more.
+		function setPlayRoot(path) {
+			if (playRootInput) {
+				playRootInput.value = path || "";
+			}
+		}
+
 		function isSingleFolderMode() {
 			return !!playModeSelect && singleFolderModes.indexOf(playModeSelect.value) !== -1;
 		}
@@ -108,6 +130,7 @@
 				removeBtn.setAttribute("aria-label", labels.remove);
 				removeBtn.textContent = "×";
 				removeBtn.addEventListener("click", function () {
+					setPlayRoot("");
 					var idx = selection.indexOf(path);
 					if (idx !== -1) {
 						selection.splice(idx, 1);
@@ -186,7 +209,7 @@
 		}
 
 		function fetchFilesForUseFolder(path) {
-			if (!isRecursiveMode()) {
+			if (!gathersRecursively()) {
 				return fetchListing(path).then(function (data) {
 					return data.files.map(function (name) {
 						return joinPath(path, name);
@@ -271,8 +294,18 @@
 			useBtn.addEventListener("click", function () {
 				var originalLabel = useBtn.textContent;
 				useBtn.disabled = true;
+				var startedEmpty = selection.length === 0;
 				fetchFilesForUseFolder(path).then(function (paths) {
 					addPaths(paths);
+					// Only when this folder accounts for the whole selection.
+					// Adding a second folder on top leaves no root, and the
+					// ESPuino falls back to deriving one from the paths - which
+					// is the right answer for a selection no single folder
+					// describes. Checked after adding, so a pick the mode
+					// refused doesn't set a root either.
+					if (startedEmpty && selection.length > 0) {
+						setPlayRoot(path);
+					}
 				}).catch(function () {
 					window.alert(labels.listError);
 				}).finally(function () {
@@ -294,6 +327,9 @@
 			checkbox.className = "mt-checkbox";
 			checkbox.checked = selection.indexOf(path) !== -1;
 			checkbox.addEventListener("change", function () {
+				// Ticking or unticking a single file means the selection is no
+				// longer "that folder", so it stops claiming to be.
+				setPlayRoot("");
 				if (checkbox.checked) {
 					addPaths([path]);
 				} else {

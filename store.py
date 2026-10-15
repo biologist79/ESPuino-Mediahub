@@ -251,7 +251,19 @@ class Store:
 
         return self._mutate(mutate)
 
-    def save_assignment(self, esp_id, card_id, name, kind, play_mode, stream_url, files):
+    def save_assignment(self, esp_id, card_id, name, kind, play_mode, stream_url, files, play_root=""):
+        """`play_root` is the folder the admin based the selection on, if they
+        used "use folder" rather than ticking files by hand.
+
+        The ESPuino is handed a folder, not a file list, and without this it
+        has to guess that folder back from the common prefix of the paths -
+        which is lossy. Pick a folder holding a single subfolder and the guess
+        lands on the subfolder, one level below what was chosen; "random
+        subfolder" then looks underneath it and finds nothing. Empty when the
+        files were picked individually, and the device falls back to guessing,
+        which is right for a selection that never had one folder behind it.
+        """
+
         def mutate(data):
             ts = now_iso()
             key = _card_key(esp_id, card_id)
@@ -272,6 +284,7 @@ class Store:
             card["play_mode"] = play_mode
             card["stream_url"] = stream_url
             card["files"] = files
+            card["play_root"] = play_root or ""
             card["updated_at"] = ts
             return card
 

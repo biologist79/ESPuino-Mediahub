@@ -391,6 +391,7 @@ def duplicate_card(esp_id, card_id):
         source["play_mode"],
         source["stream_url"],
         source["files"],
+        source.get("play_root", ""),
     )
     flash(_("Card %(id)s duplicated to %(esp_id)s.", id=card_id, esp_id=target_esp_id), "success")
     return redirect(url_for("cards"))
@@ -418,7 +419,7 @@ def assign_card(esp_id, card_id):
             if not stream_url:
                 flash(_("A stream URL is required for webradio."), "error")
                 return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
-            payload = (name, "webradio", None, stream_url, [])
+            payload = (name, "webradio", None, stream_url, [], "")
         else:
             try:
                 play_mode = int(request.form.get("play_mode", ""))
@@ -478,7 +479,14 @@ def assign_card(esp_id, card_id):
                 return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
 
             files.sort(key=lambda f: f["path"])
-            payload = (name, "files", play_mode, None, files)
+            # The folder "use folder" was applied to, if that is how the
+            # selection came about. Validated against the library rather than
+            # trusted: it is a hidden form field, and it ends up in the
+            # manifest as the folder an ESPuino will play.
+            play_root = (request.form.get("play_root") or "").strip().strip("/").strip()
+            if play_root and media_library.list_directory(MEDIA_DIR, play_root) is None:
+                play_root = ""
+            payload = (name, "files", play_mode, None, files, play_root)
 
         # Same content, one independent assignment per device — the ESPuinos
         # keep their own play positions and caches.
@@ -506,6 +514,7 @@ def assign_card(esp_id, card_id):
         single_file_play_modes=list(manifest_lib.SINGLE_FILE_PLAY_MODES),
         recursive_play_modes=list(manifest_lib.RECURSIVE_PLAY_MODES),
         single_folder_play_modes=list(manifest_lib.SINGLE_FOLDER_PLAY_MODES),
+        gather_recursive_play_modes=list(manifest_lib.GATHER_RECURSIVE_PLAY_MODES),
     )
 
 

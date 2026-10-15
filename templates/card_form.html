@@ -57,6 +57,7 @@
 		</div>
 
 		<input type="hidden" name="selected_paths_json" id="selected-paths-json" value="[]">
+		<input type="hidden" name="play_root" id="play-root" value="{{ card.play_root or '' }}">
 		<script type="application/json" id="media-tree-labels">
 			{{ {
 				"useFolder": _("Use folder"),
@@ -67,6 +68,7 @@
 				"singleFileOnly": _("This play mode only supports one file — pick a different mode to select more."),
 				"recursivePlayModes": recursive_play_modes,
 				"recursiveHint": _("Includes subfolders too (recursive play mode; depth configurable in Settings)."),
+				"gatherRecursiveModes": gather_recursive_play_modes,
 				"singleFolderModes": single_folder_play_modes,
 				"singleFolderBlocked": _("This play mode plays a single folder, so files from another one can't be added. Pick a recursive play mode to combine folders."),
 				"singleFolderConflict": _("The selected files lie in several folders, but this play mode plays only one — the ESPuino would find nothing to play. Pick a recursive play mode, or keep files from a single folder."),

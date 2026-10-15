@@ -47,6 +47,14 @@ RECURSIVE_PLAY_MODES = {15, 16, 17}
 # want subfolders to pick from, so they need their own rule.
 SINGLE_FOLDER_PLAY_MODES = {3, 4, 5, 6, 7, 9, 12}
 
+# Which modes need "use folder" to descend into subfolders when gathering.
+# Not the same question as RECURSIVE_PLAY_MODES, which is about what the
+# ESPuino does at playback: RANDOM_SUBDIRECTORY_OF_DIRECTORY (13/14) does not
+# descend - it picks one subfolder and plays that - but it needs those
+# subfolders to exist in the manifest, so gathering has to reach them. Picking
+# a folder that holds nothing but subfolders used to come back empty.
+GATHER_RECURSIVE_PLAY_MODES = RECURSIVE_PLAY_MODES | {13, 14}
+
 # The ESPuino always builds a card ID from exactly 4 UID bytes formatted as
 # "%03d" each (see cardIdSize/cardIdStringSize in src/Rfid.h) — always 12
 # decimal digits, never hex.
@@ -137,6 +145,15 @@ def build_manifest(card_id, card, files_base_url):
                 for f in card.get("files", [])
             ],
         }
+        # The folder the admin picked, when they picked one. The ESPuino plays
+        # a folder, not a file list, and derives it from the common prefix of
+        # the paths when this is absent - which silently lands one level too
+        # deep whenever everything sits in a single subfolder. Emitted only
+        # when set, so cards saved before this existed keep their version and
+        # nobody gets a re-sync out of the upgrade.
+        play_root = (card.get("play_root") or "").strip().strip("/").strip()
+        if play_root:
+            body["playRoot"] = play_root
 
     force_epoch = card.get("force_epoch", 0)
     hashed = dict(body)
