@@ -766,3 +766,13 @@ msgid ""
 "one — the ESPuino would find nothing to play. Pick a recursive play mode, "
 "or keep files from a single folder."
 msgstr ""
+
+#: templates/card_form.html:47
+msgid "Clear selection"
+msgstr ""
+
+#: templates/card_form.html:68
+msgid ""
+"This folder holds only subfolders, and this play mode doesn't look inside "
+"them. Pick a recursive play mode to include them."
+msgstr ""

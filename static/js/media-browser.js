@@ -23,6 +23,7 @@
 		var selectedListEl = document.getElementById("selected-files");
 		var selectedEmptyEl = document.getElementById("selected-files-empty");
 		var folderWarningEl = document.getElementById("selected-files-warning");
+		var clearSelectionBtn = document.getElementById("clear-selection");
 		var hiddenInput = document.getElementById("selected-paths-json");
 
 		function isSingleFileMode() {
@@ -120,6 +121,12 @@
 		function renderSelectedList() {
 			selectedListEl.innerHTML = "";
 			selectedEmptyEl.hidden = selection.length > 0;
+			// Nothing to clear when nothing is selected, and "use folder" on a
+			// tree of subfolders can run to a few hundred entries - unpicking
+			// those one × at a time is what this button exists to avoid.
+			if (clearSelectionBtn) {
+				clearSelectionBtn.hidden = selection.length === 0;
+			}
 			selection.forEach(function (path) {
 				var li = document.createElement("li");
 				var nameSpan = document.createElement("span");
@@ -208,12 +215,19 @@
 			});
 		}
 
+		// Resolves to {paths, hadSubfolders}. The second half is only there so
+		// an empty result can say which of the two reasons it was: a folder
+		// with nothing in it, or one whose audio sits in subfolders this play
+		// mode will not look into.
 		function fetchFilesForUseFolder(path) {
 			if (!gathersRecursively()) {
 				return fetchListing(path).then(function (data) {
-					return data.files.map(function (name) {
-						return joinPath(path, name);
-					});
+					return {
+						paths: data.files.map(function (name) {
+							return joinPath(path, name);
+						}),
+						hadSubfolders: data.dirs.length > 0
+					};
 				});
 			}
 			return fetch(recursiveListUrl + "?path=" + encodeURIComponent(path)).then(function (resp) {
@@ -222,7 +236,7 @@
 				}
 				return resp.json();
 			}).then(function (data) {
-				return data.files;
+				return { paths: data.files, hadSubfolders: false };
 			});
 		}
 
@@ -295,7 +309,15 @@
 				var originalLabel = useBtn.textContent;
 				useBtn.disabled = true;
 				var startedEmpty = selection.length === 0;
-				fetchFilesForUseFolder(path).then(function (paths) {
+				fetchFilesForUseFolder(path).then(function (result) {
+					var paths = result.paths;
+					// Say so instead of appearing to do nothing: the button used
+					// to return silently whenever a folder held only subfolders
+					// and the play mode didn't descend into them.
+					if (paths.length === 0) {
+						window.alert(result.hadSubfolders ? labels.useFolderSubfoldersOnly : labels.emptyFolder);
+						return;
+					}
 					addPaths(paths);
 					// Only when this folder accounts for the whole selection.
 					// Adding a second folder on top leaves no root, and the
@@ -380,6 +402,14 @@
 			error.textContent = labels.listError;
 			tree.appendChild(error);
 		});
+
+		if (clearSelectionBtn) {
+			clearSelectionBtn.addEventListener("click", function () {
+				selection = [];
+				setPlayRoot("");
+				saveSelection();
+			});
+		}
 
 		if (playModeSelect) {
 			playModeSelect.addEventListener("change", function () {

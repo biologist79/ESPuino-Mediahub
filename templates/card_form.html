@@ -42,7 +42,10 @@
 		</div>
 
 		<div class="form-row">
-			<span class="form-label">{{ _('Selected files') }}</span>
+			<div class="form-label-row">
+				<span class="form-label">{{ _('Selected files') }}</span>
+				<button type="button" class="btn btn-small btn-secondary" id="clear-selection" hidden>{{ _('Clear selection') }}</button>
+			</div>
 			<ul id="selected-files" class="file-list"></ul>
 			<p class="muted" id="selected-files-empty">{{ _('No files selected yet — browse the library below.') }}</p>
 			<p class="flash flash-error" id="selected-files-warning" hidden></p>
@@ -62,6 +65,7 @@
 			{{ {
 				"useFolder": _("Use folder"),
 				"emptyFolder": _("No audio files here."),
+				"useFolderSubfoldersOnly": _("This folder holds only subfolders, and this play mode doesn't look inside them. Pick a recursive play mode to include them."),
 				"remove": _("Remove"),
 				"listError": _("Could not list this folder (permission denied?)."),
 				"singleFileModes": single_file_play_modes,

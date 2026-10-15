@@ -866,3 +866,15 @@ msgstr ""
 "mode de lecture n'en lit qu'un seul — l'ESPuino ne trouverait rien à lire. "
 "Choisissez un mode de lecture récursif, ou ne conservez que des fichiers "
 "d'un seul dossier."
+
+#: templates/card_form.html:47
+msgid "Clear selection"
+msgstr "Vider la sélection"
+
+#: templates/card_form.html:68
+msgid ""
+"This folder holds only subfolders, and this play mode doesn't look inside "
+"them. Pick a recursive play mode to include them."
+msgstr ""
+"Ce dossier ne contient que des sous-dossiers, et ce mode de lecture n'y "
+"regarde pas. Choisissez un mode de lecture récursif pour les inclure."

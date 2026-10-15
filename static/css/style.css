@@ -317,6 +317,13 @@ main.container {
 	color: var(--brand-dark);
 }
 
+.form-label-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
 #selected-files-warning {
 	margin-top: 8px;
 }
@@ -692,9 +699,18 @@ input[type="file"]:focus,
 	cursor: pointer;
 }
 
-.mt-use-btn:hover {
+.mt-use-btn:hover:not(:disabled) {
 	background: color-mix(in srgb, var(--brand) 12%, transparent);
 	border-color: var(--brand);
+}
+
+/* A disabled button has to look disabled. Without this the "use folder"
+   button kept its hover highlight while silently refusing every click -
+   the play mode it doesn't apply to was only visible in its tooltip. */
+.btn:disabled,
+.mt-use-btn:disabled {
+	opacity: .45;
+	cursor: not-allowed;
 }
 
 .mt-checkbox {

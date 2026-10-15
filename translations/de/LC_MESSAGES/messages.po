@@ -857,3 +857,15 @@ msgstr ""
 "spielt aber nur einen — der ESPuino fände nichts zum Abspielen. Bitte "
 "einen rekursiven Abspielmodus wählen oder nur Dateien aus einem Ordner "
 "behalten."
+
+#: templates/card_form.html:47
+msgid "Clear selection"
+msgstr "Auswahl leeren"
+
+#: templates/card_form.html:68
+msgid ""
+"This folder holds only subfolders, and this play mode doesn't look inside "
+"them. Pick a recursive play mode to include them."
+msgstr ""
+"Dieser Ordner enthält nur Unterordner, und dieser Abspielmodus schaut "
+"nicht hinein. Für Unterordner einen rekursiven Abspielmodus wählen."
