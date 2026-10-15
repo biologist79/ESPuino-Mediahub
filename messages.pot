@@ -773,6 +773,6 @@ msgstr ""
 
 #: templates/card_form.html:68
 msgid ""
-"This folder holds only subfolders, and this play mode doesn't look inside "
-"them. Pick a recursive play mode to include them."
+"This folder has no audio files of its own, only subfolders. This play mode "
+"doesn't include them — pick a recursive one for that."
 msgstr ""

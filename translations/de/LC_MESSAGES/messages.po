@@ -864,8 +864,9 @@ msgstr "Auswahl leeren"
 
 #: templates/card_form.html:68
 msgid ""
-"This folder holds only subfolders, and this play mode doesn't look inside "
-"them. Pick a recursive play mode to include them."
+"This folder has no audio files of its own, only subfolders. This play mode "
+"doesn't include them — pick a recursive one for that."
 msgstr ""
-"Dieser Ordner enthält nur Unterordner, und dieser Abspielmodus schaut "
-"nicht hinein. Für Unterordner einen rekursiven Abspielmodus wählen."
+"In diesem Ordner liegen keine Audiodateien, sondern nur Unterordner. "
+"Dieser Abspielmodus bezieht sie nicht ein — dafür einen rekursiven Modus "
+"wählen."

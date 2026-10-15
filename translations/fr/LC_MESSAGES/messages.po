@@ -873,8 +873,9 @@ msgstr "Vider la sélection"
 
 #: templates/card_form.html:68
 msgid ""
-"This folder holds only subfolders, and this play mode doesn't look inside "
-"them. Pick a recursive play mode to include them."
+"This folder has no audio files of its own, only subfolders. This play mode "
+"doesn't include them — pick a recursive one for that."
 msgstr ""
-"Ce dossier ne contient que des sous-dossiers, et ce mode de lecture n'y "
-"regarde pas. Choisissez un mode de lecture récursif pour les inclure."
+"Ce dossier ne contient aucun fichier audio, seulement des sous-dossiers. "
+"Ce mode de lecture ne les prend pas en compte — choisissez un mode "
+"récursif."
