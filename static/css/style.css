@@ -704,6 +704,13 @@ input[type="file"]:focus,
 	border-color: var(--brand);
 }
 
+/* .btn sets display, which beats the browser's own [hidden] { display: none }
+   whatever the specificity - so a button given the hidden attribute would
+   stay on screen. Same trap as .live-banner[hidden] above. */
+.btn[hidden] {
+	display: none;
+}
+
 /* A disabled button has to look disabled. Without this the "use folder"
    button kept its hover highlight while silently refusing every click -
    the play mode it doesn't apply to was only visible in its tooltip. */
