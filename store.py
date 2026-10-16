@@ -59,8 +59,23 @@ class Store:
         self.data_dir = data_dir
         self.db_path = os.path.join(data_dir, "db.json")
         self.lock_path = self.db_path + ".lock"
-        os.makedirs(data_dir, exist_ok=True)
-        self._ensure_db()
+        try:
+            os.makedirs(data_dir, exist_ok=True)
+            self._ensure_db()
+        except PermissionError as exc:
+            # The one setup mistake that costs people the most time: Docker
+            # creates a missing bind-mount path as root, while the service runs
+            # as another uid. Without this, every worker dies inside
+            # _ensure_db() with a bare traceback and the container
+            # restart-loops, with nothing in the log that names the cause.
+            # entrypoint.sh catches it before Python even starts; this covers a
+            # run without the entrypoint, and a directory that stops being
+            # writable later on.
+            raise RuntimeError(
+                f"cannot write to the data directory {data_dir!r} as uid {os.geteuid()} "
+                f"({exc.strerror}) - on the host: "
+                f"chown -R {os.geteuid()}:{os.getegid()} <that directory>"
+            ) from exc
 
     def _ensure_db(self):
         """Creates db.json on first start, or migrates an existing one.

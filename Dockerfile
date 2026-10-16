@@ -4,9 +4,10 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # tzdata so the TZ env var (set in docker-compose.yml) actually resolves —
-# python:3.12-slim doesn't ship the zoneinfo database by default.
+# python:3.12-slim doesn't ship the zoneinfo database by default. gosu is how
+# entrypoint.sh steps down from root to the service user.
 RUN apt-get update \
-	&& apt-get install --no-install-recommends -y tzdata \
+	&& apt-get install --no-install-recommends -y tzdata gosu \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Dependencies first (better layer cache reuse)
@@ -19,6 +20,12 @@ COPY . .
 # Compile the .po translation catalogs into .mo (pybabel ships with the
 # Babel package, already installed as a Flask-Babel dependency above).
 RUN pybabel compile -d translations
+
+# Starts as root, hands /data to MEDIAHUB_UID/GID, then execs the CMD below
+# as that user. See the script for why that beats running as a fixed user.
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 
 ENV MEDIAHUB_DATA=/data
 ENV MEDIAHUB_MEDIA=/media
