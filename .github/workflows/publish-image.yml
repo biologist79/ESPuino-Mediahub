@@ -1,0 +1,78 @@
+# Builds the container image and publishes it to GitHub's own registry
+# (ghcr.io), so a hub can be updated with `docker compose pull` instead of a
+# git checkout plus a local build on a Raspberry Pi.
+#
+# Tags published (see the `meta` step):
+#   latest        - tip of main, i.e. what `git pull` used to give you
+#   sha-<short>   - immutable, one per commit; this is what you roll back to
+#   1.4.0 / 1.4   - only when a git tag `v1.4.0` is pushed
+#
+# Pull requests build but don't push, which keeps a broken Dockerfile from
+# reaching main unnoticed.
+name: Container-Image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+  workflow_dispatch:
+
+# A second push shouldn't race the first one for the same tag.
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # all GITHUB_TOKEN needs; no secret to create
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The ARM images are cross-built on an x86 runner, so QEMU has to stand
+      # in for the Raspberry Pi's CPU.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      # Skipped on pull requests: a fork's token is read-only and the login
+      # would fail. Nothing is pushed there anyway.
+      - if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/espuino-mediahub
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          # amd64 for NAS boxes and small servers, arm64 for Raspberry Pi 3
+          # and up, arm/v7 for a Pi 2 running the 32-bit system.
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64,linux/arm/v7' }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          # Among these labels is org.opencontainers.image.source, which is
+          # what links the package to this repository on GitHub.
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
