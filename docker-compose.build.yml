@@ -1,0 +1,14 @@
+# Build the image from this checkout instead of pulling the published one -
+# for development, for a change you want to try out, or for an architecture
+# the published image doesn't cover:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# `pull_policy: build` makes a plain `up -d` build as well, so the published
+# image is never silently pulled over your local one. Everything else (ports,
+# volumes, user, timezone) still comes from docker-compose.yml and your .env.
+services:
+  mediahub:
+    build: .
+    image: espuino-mediahub:local
+    pull_policy: build

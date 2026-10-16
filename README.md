@@ -9,17 +9,21 @@ assignments of multiple [ESPuinos](https://github.com/biologist79/ESPuino). Conc
 
 ## Quick start
 
-The container runs (per default) as `www-data` (uid/gid `33:33`) rather than root, so
-`./data` (the only thing it writes to) needs to be writable by that user
-first. Point `./media` at wherever your existing audio library already
-lives — it's mounted read-only and MediaHub never writes to it. If you want
-to make any changes: don't edit docker-compose.yml directly - use .env instead.
+MediaHub is a single container, published for `amd64`, `arm64` and `arm/v7` — a Raspberry Pi 2, a
+Pi 5 and an Intel NAS are all covered. There's nothing to compile and you don't need a checkout of
+this repository: two files are enough.
+
+The service runs (per default) as `www-data` (uid/gid `33:33`) rather than root. The container
+starts as root just long enough to hand `./data` — the only thing it writes to — to that user and
+then steps down to it, so there is no `chown` for you to run first. Point `./media` at wherever your
+existing audio library already lives — it's mounted read-only and MediaHub never writes to it. If
+you want to make any changes: don't edit docker-compose.yml directly - use .env instead.
 
 ```bash
-cp env-example .env
-mkdir -p data
-chown -R 33:33 data
-docker compose up -d --build
+mkdir espuino-mediahub && cd espuino-mediahub
+curl -O https://raw.githubusercontent.com/biologist79/ESPuino-Mediahub/main/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/biologist79/ESPuino-Mediahub/main/env-example
+docker compose up -d
 ```
 
 By default MediaHub looks for a local `./media` folder; set `MEDIAHUB_MEDIA` in
@@ -34,7 +38,17 @@ in `.env` to the uid/gid that already owns your library (`id -u` / `id -g`).
 Then open [http://localhost:8080](http://localhost:8080).
 Hint: Adjust localhost and port according to your needs.
 
-For local development without Docker:
+To build the image from a checkout instead of pulling the published one — for development, or for
+an architecture the published image doesn't cover:
+
+```bash
+git clone https://github.com/biologist79/ESPuino-Mediahub
+cd ESPuino-Mediahub
+cp env-example .env
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+For local development without Docker at all:
 
 ```bash
 pip install -r requirements.txt
@@ -44,20 +58,34 @@ python app.py        # http://localhost:8080
 ## Updating
 
 ```bash
-git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-`git pull` stays conflict-free because your settings live in `.env` (which git
-ignores), not in the tracked files. `--build` is required — without it Compose
-reuses the existing image and keeps running the previous version.
+`pull` fetches the current image, `up -d` replaces the running container with it. Your `data`
+directory and your `.env` are untouched — that's the whole update.
+
+Which image you get is decided by `MEDIAHUB_TAG` in your `.env`:
+
+| Tag | Points at |
+| --- | --- |
+| `latest` (default) | the tip of `main` — the same thing `git pull` used to give you |
+| `sha-<short>` | one exact commit, immutable. Set it to roll back; the tags are listed on the [package page](https://github.com/biologist79/ESPuino-Mediahub/pkgs/container/espuino-mediahub). |
+| `1.4`, `1.4.0` | a release, if one has been tagged |
+
+Two things worth re-checking after an update: `env-example` is where new options show up first and
+they have to be copied into your `.env` by hand, and `docker-compose.yml` itself occasionally
+changes — `curl -O` it again if the release notes say so. An old checkout still works as well:
+`git pull` there picks up the Compose file that pulls the image, so `docker compose pull && docker
+compose up -d` takes over from `--build` and nothing else changes.
 
 ## Stack
 
 - **Python 3.12 + Flask** (served by Gunicorn in the container), image based on `python:3.12-slim`.
+- **Published image**: `ghcr.io/biologist79/espuino-mediahub` for `amd64`, `arm64` and `arm/v7`, built and pushed by [`publish-image.yml`](.github/workflows/publish-image.yml) on every push to `main`.
 - **Framework-free frontend** — hand-written CSS in the ESPuino look (blue top bar, logo). Works offline, no CDN dependencies.
 - Two volumes: `./data` (devices/cards/assignments in a single `db.json`, read-write) and `./media` (your own existing audio library, mounted read-only — MediaHub only browses and references it, it never copies or uploads files).
-- Runs as non-root (`33:33` / `www-data`) by default; see [Quick start](#quick-start).
+- Runs as non-root (`33:33` / `www-data`) by default — `entrypoint.sh` hands `/data` to that uid and drops privileges; see [Quick start](#quick-start).
 - **Multilingual** (DE/EN/FR) via Flask-Babel; language switcher top right, auto-detected via `Accept-Language`.
 - **Optional password** for the web UI (Settings page) — the ESPuino-facing API stays open regardless, since devices can't log in.
 

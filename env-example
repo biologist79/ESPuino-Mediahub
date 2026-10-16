@@ -1,7 +1,9 @@
 # Your mediahub settings. Copy this file to .env and edit then
+MEDIAHUB_TAG=latest         # image version: latest = main branch, or a sha-... tag to pin/roll back
 MEDIAHUB_PORT=8080          # port where mediahub runs
 MEDIAHUB_DATA=./data        # Mediahub's database directory
 MEDIAHUB_MEDIA=./media      # where your audiofiles live
+MEDIAHUB_NAME=espuino-mediahub  # container name, e.g. for `docker logs <name>`
 MEDIAHUB_UID=33             # user Mediahub runs with
 MEDIAHUB_GID=33             # group Mediahub runs with
 TZ=Europe/Berlin            # Your timezone
