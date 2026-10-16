@@ -15,13 +15,17 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-    paths-ignore:
+    paths-ignore: &not-in-image
       - "docs/**"
       - "README.md"
+      # Excluded from the build context by .dockerignore, so changing them
+      # cannot change the image - no need to rebuild three architectures.
+      - "docker-compose*.yml"
+      - "env-example"
+      - "babel.cfg"
+      - "messages.pot"
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "README.md"
+    paths-ignore: *not-in-image
   workflow_dispatch:
 
 # A second push shouldn't race the first one for the same tag.

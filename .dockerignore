@@ -1,7 +1,19 @@
 # Some things for docker to ignore
 
+# Deployment files: they describe how to RUN the container, so they have no
+# business inside it - and keeping them out of the build context means a change
+# to one of them no longer produces a new image (see paths-ignore in
+# .github/workflows/publish-image.yml).
 .env
+docker-compose.yml
+docker-compose.build.yml
 docker-compose.override.yml
+env-example
+
+# Translation tooling: pybabel extract/update run on a developer machine. The
+# image only needs the .po files, which `pybabel compile` turns into .mo.
+babel.cfg
+messages.pot
 
 data/
 media/
