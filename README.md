@@ -20,7 +20,7 @@ existing audio library already lives — it's mounted read-only and MediaHub nev
 you want to make any changes: don't edit docker-compose.yml directly - use .env instead.
 
 ```bash
-mkdir espuino-mediahub && cd espuino-mediahub
+mkdir ESPuino-Mediahub && cd ESPuino-Mediahub
 curl -O https://raw.githubusercontent.com/biologist79/ESPuino-Mediahub/main/docker-compose.yml
 curl -o .env https://raw.githubusercontent.com/biologist79/ESPuino-Mediahub/main/env-example
 docker compose up -d
