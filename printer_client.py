@@ -23,7 +23,7 @@ import urllib.request
 
 # Trailing slash trimmed so paths can be appended directly. Empty = the integration
 # is off, and every call raises PrinterUnavailable.
-BASE_URL = os.environ.get("MEDIAHUB_PRINTER_URL", "").rstrip("/")
+BASE_URL = os.environ.get("MEDIAHUB_PRINTER_URL", "").rstrip("/") or "https://kartenschmiede.home.tilman.baumann.name"
 
 # Short on purpose: these calls happen while an admin waits, and the hub runs two
 # gunicorn sync workers that the ESPuino-facing API also needs (see Dockerfile).
