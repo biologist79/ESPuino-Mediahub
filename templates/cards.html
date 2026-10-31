@@ -81,10 +81,19 @@
 				</tr>
 			</thead>
 			<tbody>
-				{% for card, content_label, content_detail, device_label in cards %}
-				{% set row_key = card.esp_id ~ "/" ~ card.card_id %}
+				{% for identity, card, content_label, content_detail, device_label in cards %}
+				{# Row key and URLs address the card's *identity*, which is a UID for a card a
+				   device has reported and a hub token for one the print shop is still making. #}
+				{% set row_key = card.esp_id ~ "/" ~ identity %}
+				{% set card_label = card.card_id or card.name or identity %}
 				<tr>
-					<td><code>{{ card.card_id }}</code></td>
+					<td>
+						{% if card.card_id %}
+							<code>{{ card.card_id }}</code>
+						{% else %}
+							<span class="badge badge-attention">{{ _('to print') }}</span>
+						{% endif %}
+					</td>
 					<td><a href="{{ url_for('cards', esp_id=card.esp_id, pending=1 if only_pending else None) }}">{{ device_label }}</a></td>
 					<td>{{ card.name or "—" }}</td>
 					<td>
@@ -102,28 +111,31 @@
 					</td>
 					<td>{{ card.last_seen | shortdt }}</td>
 					<td class="table-actions">
-						<a class="btn btn-small" href="{{ url_for('assign_card', esp_id=card.esp_id, card_id=card.card_id) }}">
+						<a class="btn btn-small" href="{{ url_for('assign_card', esp_id=card.esp_id, card_id=identity) }}">
 							{{ _('Assign') if card.status != "assigned" else _('Edit') }}
 						</a>
 						{% if card.status == "assigned" %}
-						<form method="post" action="{{ url_for('force_refresh_card', esp_id=card.esp_id, card_id=card.card_id) }}">
-							<button class="btn btn-small btn-secondary" type="submit">{{ _('Force refresh') }}</button>
-						</form>
-						<button type="button" class="btn btn-small btn-secondary mh-manifest-btn"
-							data-key="{{ row_key }}" data-url="{{ url_for('manifest_preview', esp_id=card.esp_id, card_id=card.card_id) }}"
-							data-error="{{ _('Could not load the manifest.') }}">{{ _('Manifest') }}</button>
+						{% if card.card_id %}
+							{# Both of these are about a card already sitting on the device #}
+							<form method="post" action="{{ url_for('force_refresh_card', esp_id=card.esp_id, card_id=identity) }}">
+								<button class="btn btn-small btn-secondary" type="submit">{{ _('Force refresh') }}</button>
+							</form>
+							<button type="button" class="btn btn-small btn-secondary mh-manifest-btn"
+								data-key="{{ row_key }}" data-url="{{ url_for('manifest_preview', esp_id=card.esp_id, card_id=identity) }}"
+								data-error="{{ _('Could not load the manifest.') }}">{{ _('Manifest') }}</button>
+						{% endif %}
 						<button type="button" class="btn btn-small btn-secondary mh-duplicate-btn"
 							data-esp-id="{{ card.esp_id }}"
-							data-url="{{ url_for('duplicate_card', esp_id=card.esp_id, card_id=card.card_id) }}"
-							data-desc="{{ _('Copy card %(id)s\'s configuration to:', id=card.card_id) }}"
+							data-url="{{ url_for('duplicate_card', esp_id=card.esp_id, card_id=identity) }}"
+							data-desc="{{ _('Copy card %(id)s\'s configuration to:', id=card_label) }}"
 							data-no-other-device="{{ _('No other known ESPuino to duplicate to yet.') }}">{{ _('Duplicate') }}</button>
 						{% endif %}
-						<form method="post" action="{{ url_for('delete_card', esp_id=card.esp_id, card_id=card.card_id) }}" onsubmit="return confirm('{{ _('Really delete card %(id)s?', id=card.card_id) }}');">
+						<form method="post" action="{{ url_for('delete_card', esp_id=card.esp_id, card_id=identity) }}" onsubmit="return confirm('{{ _('Really delete card %(id)s?', id=card_label) }}');">
 							<button class="btn btn-small btn-danger" type="submit">{{ _('Delete') }}</button>
 						</form>
 					</td>
 				</tr>
-				{% if card.status == "assigned" %}
+				{% if card.status == "assigned" and card.card_id %}
 				<tr class="mh-manifest-row" data-key="{{ row_key }}" hidden>
 					<td colspan="7"><pre class="mh-manifest-json"></pre></td>
 				</tr>

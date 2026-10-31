@@ -10,6 +10,7 @@ import posixpath
 
 from flask import (
     Flask,
+    Response,
     abort,
     flash,
     jsonify,
@@ -24,8 +25,11 @@ from flask_babel import Babel, get_locale, gettext as _, ngettext
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import cover_art
 import manifest as manifest_lib
 import media_library
+import print_back
+import printer_client
 import store as store_lib
 from espuino_client import delete_rfid_on_device
 
@@ -114,6 +118,13 @@ def _inject_auth_state():
     return {"hub_password_set": bool(store.get_settings().get("password_hash"))}
 
 
+@app.context_processor
+def _inject_printer():
+    """The print shop's URL, read at render time so there is one source for it
+    (`printer_client.BASE_URL`, which is also where its calls go)."""
+    return {"printer_url": printer_client.BASE_URL}
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     password_hash = store.get_settings().get("password_hash")
@@ -141,18 +152,23 @@ def logout():
 def index():
     cards = store.list_cards()
     devices = store.list_devices()
+    print_project_count = len(store.list_print_projects())
     pending_count = sum(1 for c in cards.values() if c["status"] == "pending")
     assigned_count = sum(1 for c in cards.values() if c["status"] == "assigned")
     total_bytes = sum(
         f["size"] for c in cards.values() if c["kind"] == "files" for f in c.get("files", [])
     )
     device_label = ngettext("%(num)s device", "%(num)s devices", len(devices)) % {"num": len(devices)}
+    print_project_label = ngettext("%(num)s project", "%(num)s projects", print_project_count) % {
+        "num": print_project_count
+    }
     return render_template(
         "index.html",
         device_label=device_label,
         pending_count=pending_count,
         assigned_count=assigned_count,
         total_bytes=total_bytes,
+        print_project_label=print_project_label,
     )
 
 
@@ -317,18 +333,23 @@ def cards():
     esp_id_filter = request.args.get("esp_id") or ""
     cards_by_key = store.list_cards()
     devices_by_id = store.list_devices()
+    # The row carries the card's *identity* (the store key's second half), not
+    # `card.card_id`: a card ordered from the print shop has no UID yet, and every
+    # link below has to address it the way the store and the URL space do.
     rows = [
         (
+            store_lib.split_card_key(key, c),
             c,
             _content_label(c),
             _content_detail(c),
             devices_by_id.get(c["esp_id"], {}).get("alias") or c["esp_id"],
         )
-        for c in cards_by_key.values()
+        for key, c in cards_by_key.items()
         if (not only_pending or c["status"] == "pending")
         and (not esp_id_filter or c["esp_id"] == esp_id_filter)
     ]
-    rows.sort(key=lambda row: row[0]["last_seen"], reverse=True)
+    # row[0] is the identity, row[1] the record itself.
+    rows.sort(key=lambda row: row[1]["last_seen"], reverse=True)
     return render_template(
         "cards.html",
         cards=rows,
@@ -392,16 +413,107 @@ def duplicate_card(esp_id, card_id):
         source["stream_url"],
         source["files"],
         source.get("play_root", ""),
+        source.get("print"),
     )
     flash(_("Card %(id)s duplicated to %(esp_id)s.", id=card_id, esp_id=target_esp_id), "success")
     return redirect(url_for("cards"))
+
+
+def _read_assignment(form):
+    """The assignment a card form carries, validated: `(payload, error, warning)`.
+
+    Both the ordinary assignment form and the print-card form end in the same
+    `save_assignment` call, so both read their content through this function — a
+    rule only one of them applied would be a bug in whichever form the admin
+    happened to use.
+
+    `payload` is the six fields `save_assignment` takes after the card's identity.
+    `error` is fatal (nothing may be written) and `warning` is not (the assignment
+    is usable, something was skipped); either, both or neither may be set, and a
+    warning is reported alongside an error so a form does not lose it.
+    """
+    name = form.get("name", "").strip()
+    kind = form.get("kind", "files")
+
+    if kind == "webradio":
+        stream_url = form.get("stream_url", "").strip()
+        if not stream_url:
+            return None, _("A stream URL is required for webradio."), None
+        return (name, "webradio", None, stream_url, [], ""), None, None
+
+    try:
+        play_mode = int(form.get("play_mode", ""))
+    except ValueError:
+        play_mode = -1
+    if not manifest_lib.is_valid_file_play_mode(play_mode):
+        return None, _("Please choose a valid play mode."), None
+
+    try:
+        selected_paths = json.loads(form.get("selected_paths_json", "[]"))
+    except ValueError:
+        selected_paths = []
+
+    files, missing = [], []
+    for relpath in selected_paths:
+        info = media_library.stat_and_hash(MEDIA_DIR, relpath)
+        if info is None:
+            missing.append(relpath)
+        else:
+            files.append(info)
+
+    warning = None
+    if missing:
+        warning = _(
+            "Some selected files could not be used (missing, or not "
+            "readable by the container's user) and were skipped: "
+            "%(paths)s",
+            paths=", ".join(missing),
+        )
+
+    if not files:
+        return None, _("At least one audio file is required."), warning
+
+    if play_mode in manifest_lib.SINGLE_FILE_PLAY_MODES and len(files) > 1:
+        return (
+            None,
+            _("This play mode only supports a single file — please select just one."),
+            warning,
+        )
+
+    # The ESPuino is handed a folder, not a file list (see
+    # SINGLE_FOLDER_PLAY_MODES): with files from several folders these modes find
+    # nothing to play at all. The browser already refuses the combination, but a
+    # form can be submitted without it.
+    folders = {posixpath.dirname(f["path"]) for f in files}
+    if play_mode in manifest_lib.SINGLE_FOLDER_PLAY_MODES and len(folders) > 1:
+        return (
+            None,
+            _(
+                "This play mode plays a single folder, but the selected files "
+                "lie in %(num)s different ones. Choose a recursive play mode, "
+                "or pick files from one folder only.",
+                num=len(folders),
+            ),
+            warning,
+        )
+
+    files.sort(key=lambda f: f["path"])
+    # The folder "use folder" was applied to, if that is how the selection came
+    # about. Validated against the library rather than trusted: it is a hidden form
+    # field, and it ends up in the manifest as the folder an ESPuino will play.
+    play_root = (form.get("play_root") or "").strip().strip("/").strip()
+    if play_root and media_library.list_directory(MEDIA_DIR, play_root) is None:
+        play_root = ""
+    return (name, "files", play_mode, None, files, play_root), None, warning
 
 
 @app.route("/cards/<esp_id>/<card_id>/assign", methods=["GET", "POST"])
 def assign_card(esp_id, card_id):
     card = store.get_card(esp_id, card_id) or {
         "esp_id": esp_id,
-        "card_id": card_id,
+        # A card ordered from the print shop has no UID yet and is addressed by a
+        # hub token instead — which is not a card id and must not be shown as one.
+        "card_id": card_id if manifest_lib.is_valid_card_id(card_id) else None,
         "status": "pending",
         "name": "",
         "kind": "files",
@@ -411,88 +523,24 @@ def assign_card(esp_id, card_id):
     }
 
     if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        kind = request.form.get("kind", "files")
-
-        if kind == "webradio":
-            stream_url = request.form.get("stream_url", "").strip()
-            if not stream_url:
-                flash(_("A stream URL is required for webradio."), "error")
-                return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
-            payload = (name, "webradio", None, stream_url, [], "")
-        else:
-            try:
-                play_mode = int(request.form.get("play_mode", ""))
-            except ValueError:
-                play_mode = -1
-            if not manifest_lib.is_valid_file_play_mode(play_mode):
-                flash(_("Please choose a valid play mode."), "error")
-                return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
-
-            try:
-                selected_paths = json.loads(request.form.get("selected_paths_json", "[]"))
-            except ValueError:
-                selected_paths = []
-
-            files, missing = [], []
-            for relpath in selected_paths:
-                info = media_library.stat_and_hash(MEDIA_DIR, relpath)
-                if info is None:
-                    missing.append(relpath)
-                else:
-                    files.append(info)
-
-            if missing:
-                flash(
-                    _(
-                        "Some selected files could not be used (missing, or not "
-                        "readable by the container's user) and were skipped: "
-                        "%(paths)s",
-                        paths=", ".join(missing),
-                    ),
-                    "error",
-                )
-
-            if not files:
-                flash(_("At least one audio file is required."), "error")
-                return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
-
-            if play_mode in manifest_lib.SINGLE_FILE_PLAY_MODES and len(files) > 1:
-                flash(_("This play mode only supports a single file — please select just one."), "error")
-                return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
-
-            # The ESPuino is handed a folder, not a file list (see
-            # SINGLE_FOLDER_PLAY_MODES): with files from several folders these
-            # modes find nothing to play at all. The browser already refuses
-            # the combination, but a form can be submitted without it.
-            folders = {posixpath.dirname(f["path"]) for f in files}
-            if play_mode in manifest_lib.SINGLE_FOLDER_PLAY_MODES and len(folders) > 1:
-                flash(
-                    _(
-                        "This play mode plays a single folder, but the selected files "
-                        "lie in %(num)s different ones. Choose a recursive play mode, "
-                        "or pick files from one folder only.",
-                        num=len(folders),
-                    ),
-                    "error",
-                )
-                return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
-
-            files.sort(key=lambda f: f["path"])
-            # The folder "use folder" was applied to, if that is how the
-            # selection came about. Validated against the library rather than
-            # trusted: it is a hidden form field, and it ends up in the
-            # manifest as the folder an ESPuino will play.
-            play_root = (request.form.get("play_root") or "").strip().strip("/").strip()
-            if play_root and media_library.list_directory(MEDIA_DIR, play_root) is None:
-                play_root = ""
-            payload = (name, "files", play_mode, None, files, play_root)
+        payload, error, warning = _read_assignment(request.form)
+        if warning:
+            # Not fatal: the rest of the selection is usable, and the admin is told
+            # what was dropped rather than losing the whole form over it.
+            flash(warning, "error")
+        if error:
+            flash(error, "error")
+            return redirect(url_for("assign_card", esp_id=esp_id, card_id=card_id))
 
         # Same content, one independent assignment per device — the ESPuinos
         # keep their own play positions and caches.
         targets = _assignment_targets(esp_id)
         for target_esp_id in targets:
-            store.save_assignment(target_esp_id, card_id, *payload)
+            # A card the hub ordered printed carries its print order to every device
+            # it is written to: that reference is what `promote_print_card` finds the
+            # card by once the printer reports the UID. A card a device reported has
+            # none, and then nothing is passed.
+            store.save_assignment(target_esp_id, card_id, *payload, print_ref=card.get("print"))
 
         if len(targets) == 1:
             flash(_("Card %(id)s assigned.", id=card_id), "success")
@@ -540,7 +588,14 @@ def delete_card(esp_id, card_id):
         abort(404)
 
     delete_mode = store.get_settings()["delete_mode"]
-    if delete_mode == "secure" and card["status"] == "assigned":
+    # Secure delete calls the ESPuino with this id. A card that has no UID yet is
+    # keyed by a hub token, which means nothing to a device — and the card is not
+    # on any device in the first place.
+    if (
+        delete_mode == "secure"
+        and card["status"] == "assigned"
+        and manifest_lib.is_valid_card_id(card_id)
+    ):
         # The assignment already names its one ESPuino — no more guessing
         # from whichever device last happened to tap the card.
         device = store.list_devices().get(esp_id)
@@ -571,10 +626,380 @@ def manifest_preview(esp_id, card_id):
     card — same builder as card_manifest(), but without its side effects
     (no device/card "last seen" tracking, no pending-registration)."""
     card = store.get_card(esp_id, card_id)
-    if card is None or card["status"] != "assigned":
+    # A card without a UID has no manifest to preview either: the manifest is built
+    # from a card id, and there is none until the card is printed.
+    if card is None or card["status"] != "assigned" or not manifest_lib.is_valid_card_id(card_id):
         abort(404)
     files_base_url = url_for("serve_media", filename="", _external=True)
     return jsonify(manifest_lib.build_manifest(card_id, card, files_base_url))
+
+
+# --------------------------------------------------------------------------
+# Web UI: print projects (orders at the card-printing service)
+# --------------------------------------------------------------------------
+@app.route("/print")
+def print_projects():
+    projects = store.list_print_projects()
+    rows = [
+        (token, project, store.count_cards_for_print_project(token))
+        for token, project in projects.items()
+    ]
+    rows.sort(key=lambda row: row[1]["created_at"], reverse=True)
+    return render_template("print_projects.html", projects=rows)
+
+
+def _read_order_into(token, project):
+    """Asks the print shop about this project's order and stores what it says.
+
+    Returns `(error, promoted)`: the error to show the admin — None when the shop
+    answered — and how many hub cards the answer turned into real ones. The status is
+    the shop's own vocabulary and is never interpreted here.
+
+    A card's `serial_number` is the UID the print process read off the chip, so a
+    card that has one is the card a device now holds, and the assignment made for it
+    before printing moves onto that number here. This is the only place that happens:
+    a tap cannot do it, because the hub would have to ask the shop on a device's
+    request, and the button on the project page is what does the asking.
+
+    `token` is passed alongside the record because the record does not carry its own
+    key — the store keys projects by it, and a second copy could disagree with it.
+    """
+    try:
+        order = printer_client.get_order(project["prefix"])
+        cards = printer_client.list_cards(project["prefix"])
+    except printer_client.PrinterError as exc:
+        return str(exc), 0
+    store.set_print_project_status(token, order.get("status"))
+
+    ts = store_lib.now_iso()
+    promoted = 0
+    for card in cards:
+        uid = str(card.get("serial_number") or "").strip()
+        if not manifest_lib.is_valid_card_id(uid):
+            # Not something this hub keys a card by. The field is written by the
+            # print process alone, so this is not distrust: it is that the whole
+            # record is keyed by the card id, and a value that is not one would
+            # produce a card the ESPuino could never report.
+            continue
+        promoted += store.promote_print_card({"token": token, "id": card.get("id")}, uid, ts)
+    return None, promoted
+
+
+@app.route("/print/new", methods=["POST"])
+def create_print_project():
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash(_("Please give the print project a name."), "error")
+        return redirect(url_for("print_projects"))
+
+    project = store.create_print_project(name)
+    flash(_("Print project %(name)s created.", name=name), "success")
+    # The order is placed right away, so the customer has something to open and pay
+    # for. A shop that is down does not lose the project: it stays here, unlinked,
+    # and "Check order" places it later — the uuid is already minted either way.
+    try:
+        order = printer_client.ensure_order(project["prefix"])
+    except printer_client.PrinterError as exc:
+        flash(
+            _("The print shop did not take the order: %(error)s", error=str(exc)),
+            "error",
+        )
+    else:
+        store.set_print_project_status(project["token"], order.get("status"))
+    return redirect(url_for("print_project", token=project["token"]))
+
+
+@app.route("/print/<token>/sync", methods=["POST"])
+def sync_print_project(token):
+    """Re-reads the order at the print shop: its status, and — once cards exist —
+    the UIDs the print process has filled in. The (only) trigger is the button on the
+    project page: nothing polls the shop, and nothing here runs on a device's path."""
+    project = store.get_print_project(token)
+    if project is None:
+        abort(404)
+    error, promoted = _read_order_into(token, project)
+    if error:
+        flash(_("The print shop could not be read: %(error)s", error=error), "error")
+        return redirect(url_for("print_project", token=token))
+    status = (store.get_print_project(token) or {}).get("status") or ""
+    flash(_("Order at the print shop: %(status)s", status=status), "success")
+    if promoted:
+        # The cards themselves are on the page below, under Printed — this only says
+        # that something changed, since a check that promotes nothing looks the same
+        # as one that was never run.
+        flash(
+            ngettext(
+                "%(num)s card is printed and works here now.",
+                "%(num)s cards are printed and work here now.",
+                promoted,
+            )
+            % {"num": promoted},
+            "success",
+        )
+    return redirect(url_for("print_project", token=token))
+
+
+@app.route("/print/<token>")
+def print_project(token):
+    project = store.get_print_project(token)
+    if project is None:
+        abort(404)
+
+    devices_by_id = store.list_devices()
+    # One printed card is one hub card per device, so they are grouped by the card
+    # they become at the shop — that grouping is also what the print sync works
+    # per card, and what tells the admin whether a card is printed yet.
+    groups = {}
+    for key, card in store.list_cards().items():
+        ref = card.get("print") or {}
+        if ref.get("token") != token:
+            continue
+        group = groups.setdefault(
+            ref.get("id"),
+            {"id": ref.get("id"), "promoted_at": ref.get("promoted_at"), "cards": []},
+        )
+        group["cards"].append(
+            (
+                store_lib.split_card_key(key, card),
+                card,
+                devices_by_id.get(card["esp_id"], {}).get("alias") or card["esp_id"],
+            )
+        )
+    for group in groups.values():
+        group["cards"].sort(key=lambda row: row[2].lower())
+    ordered = [groups[shop_id] for shop_id in sorted(groups, key=lambda i: (i is None, i))]
+    return render_template(
+        "print_project.html",
+        token=token,
+        project=project,
+        groups=ordered,
+        card_count=store.count_cards_for_print_project(token),
+    )
+
+
+@app.route("/print/<token>/delete", methods=["POST"])
+def delete_print_project(token):
+    if store.get_print_project(token) is None:
+        abort(404)
+    # Deliberately no cascade: these are live cards at the shop.
+    count = store.count_cards_for_print_project(token)
+    if count:
+        flash(
+            ngettext(
+                "This print project still has %(num)s card — delete it first.",
+                "This print project still has %(num)s cards — delete them first.",
+                count,
+            )
+            % {"num": count},
+            "error",
+        )
+        return redirect(url_for("print_project", token=token))
+    store.delete_print_project(token)
+    flash(_("Print project deleted."), "success")
+    return redirect(url_for("print_projects"))
+
+
+def _uploaded_cover():
+    """`(cover, error)` from the cover part of a card form.
+
+    `cover` is `(bytes, content_type)` the way `cover_art.resolve` wants it. An
+    upload the print shop cannot print is an *error*, not a silent fall back to the
+    media: the admin picked that file on purpose, and a card printed with the wrong
+    picture is worse than a form that says no.
+    """
+    upload = request.files.get("cover")
+    if upload is None or not upload.filename:
+        return None, None
+    content_type = (upload.mimetype or "").lower()
+    if content_type not in cover_art.CONTENT_TYPES.values():
+        return None, _("The cover must be a PNG, JPEG, WebP or GIF image.")
+    try:
+        data = upload.read()
+    except OSError:
+        return None, _("The uploaded cover could not be read.")
+    if not data:
+        return None, _("The uploaded cover is empty.")
+    if len(data) > cover_art.MAX_ART_BYTES:
+        return None, _("The uploaded cover is too large (limit is 10 MB).")
+    return (data, content_type), None
+
+
+def _selected_devices(known):
+    """The devices a print card is written to: every ticked box that is known.
+
+    No primary device here, unlike the assignment form: there is no card yet, so
+    all of them are equal targets — the card exists once, and each ticked ESPuino
+    gets its own record of it (own play position, own cache).
+    """
+    return [esp_id for esp_id in request.form.getlist("esp_ids") if esp_id in known]
+
+
+def _card_name(payload, shop_card_id):
+    """The card's name: the admin's, or one derived from the media.
+
+    The service requires a non-empty name, while a hub card's name is optional
+    ("display/logs only" here), so an unnamed card is named after the folder or the
+    file it plays — and only then after its number. The same name is then used on
+    this side too: one card, one name, rather than the same card appearing unnamed
+    in the hub and named at the shop. Not translated: this is a card's name, not hub
+    UI text.
+    """
+    name, _kind, _play_mode, _stream_url, files, play_root = payload
+    if name:
+        return name
+    if play_root:
+        return os.path.basename(play_root.rstrip("/")) or f"Card {shop_card_id}"
+    if files:
+        stem = os.path.splitext(os.path.basename(files[0]["path"]))[0]
+        if stem:
+            return stem
+    return f"Card {shop_card_id}"
+
+
+@app.route("/print/<token>/card/new", methods=["GET", "POST"])
+def new_print_card(token):
+    """One card of this project: an ordinary assignment plus the image it is printed
+    with, written to both systems in one submit.
+
+    The cover is the reason the two happen together: the shop refuses a card without
+    a front image, and the only thing that says what the cover *is* is the media the
+    card will play. So the assignment is read and validated first, then the cover is
+    resolved from it, then the shop card is created at the project's next card id —
+    and only then does a hub record exist, holding the print order it belongs to.
+    """
+    project = store.get_print_project(token)
+    if project is None:
+        abort(404)
+
+    devices = store.list_devices()
+    if request.method == "POST":
+        payload, error, warning = _read_assignment(request.form)
+        upload, upload_error = _uploaded_cover()
+        if warning:
+            flash(warning, "error")
+        if error or upload_error:
+            flash(error or upload_error, "error")
+            return _print_card_form(token, project, devices, request.form)
+
+        targets = _selected_devices(devices)
+        if not targets:
+            # Every failure below re-renders the form with what was submitted
+            # instead of redirecting: a folder-at-a-time selection is a lot of work
+            # to lose to a missing cover, and there is no stored record to prefill
+            # from, the way there is when editing an existing card.
+            flash(_("Please tick the ESPuinos this card should work on."), "error")
+            return _print_card_form(token, project, devices, request.form)
+
+        # An uploaded cover wins; otherwise it comes from the media (a sidecar image
+        # beside it, or the artwork inside a track).
+        cover = cover_art.resolve(MEDIA_DIR, [f["path"] for f in payload[4]], upload)
+        if cover is None:
+            flash(
+                _(
+                    "No cover found for this card — neither beside the media nor inside "
+                    "it. Upload an image to print it with."
+                ),
+                "error",
+            )
+            return _print_card_form(token, project, devices, request.form)
+
+        shop_card_id = store.allocate_shop_card_id(token)
+        name = _card_name(payload, shop_card_id)
+        payload = (name,) + payload[1:]
+        try:
+            # The track list rides along as the card's back text, and no back side
+            # with it: a back spends a ribbon panel, so which one the card gets
+            # stays the customer's choice at the shop — the list is simply there
+            # when he picks a markdown back.
+            printer_client.put_card(
+                project["prefix"],
+                shop_card_id,
+                name,
+                cover,
+                back_text=print_back.markdown_for(payload),
+            )
+        except printer_client.PrinterError as exc:
+            # Nothing was written on this side either, so the card can be submitted
+            # again: the shop id was consumed, but the ids are the hub's to pick and
+            # the retry lands on the next one — a gap in them is already possible
+            # (a card deleted at the shop).
+            flash(
+                _("The card was not created at the print shop: %(error)s", error=str(exc)),
+                "error",
+            )
+            return _print_card_form(token, project, devices, request.form)
+
+        # The hub's record of the same card. It has no UID yet — it is identified by
+        # a hub token until the print process reports one — and it carries the print
+        # order, which is what `promote_print_card` finds it by afterwards.
+        identity = store_lib.print_card_identity()
+        print_ref = {"token": token, "prefix": project["prefix"], "id": shop_card_id}
+        for esp_id in targets:
+            store.save_assignment(esp_id, identity, *payload, print_ref=print_ref)
+
+        flash(
+            _("Card %(num)s created: it is at the print shop, and ready here.", num=shop_card_id),
+            "success",
+        )
+        return redirect(url_for("print_project", token=token))
+
+    return _print_card_form(token, project, devices)
+
+
+def _print_card_form(token, project, devices, form=None):
+    """Renders the print-card form, prefilled from `form` when a submit failed."""
+    form = form or {}
+    try:
+        submitted = json.loads(form.get("selected_paths_json", "[]"))
+    except ValueError:
+        submitted = []
+    try:
+        play_mode = int(form.get("play_mode", ""))
+    except (TypeError, ValueError):
+        play_mode = None
+    return render_template(
+        "print_card_form.html",
+        token=token,
+        project=project,
+        devices=devices,
+        play_modes=manifest_lib.FILE_PLAY_MODES,
+        single_file_play_modes=list(manifest_lib.SINGLE_FILE_PLAY_MODES),
+        recursive_play_modes=list(manifest_lib.RECURSIVE_PLAY_MODES),
+        single_folder_play_modes=list(manifest_lib.SINGLE_FOLDER_PLAY_MODES),
+        gather_recursive_play_modes=list(manifest_lib.GATHER_RECURSIVE_PLAY_MODES),
+        initial_name=form.get("name", ""),
+        initial_kind=form.get("kind", "files"),
+        initial_stream_url=form.get("stream_url", ""),
+        selected_play_mode=play_mode,
+        selected_play_root=form.get("play_root", ""),
+        initial_selection=submitted if isinstance(submitted, list) else [],
+        # A failed submit re-renders this form rather than redirecting, so what was
+        # ticked has to come back with it.
+        selected_esp_ids=form.getlist("esp_ids") if hasattr(form, "getlist") else [],
+    )
+
+
+@app.route("/print/<token>/card/cover", methods=["POST"])
+def print_card_cover(token):
+    """The cover a selection would be printed with, for the form's own preview.
+
+    POST, not GET: a folder-at-a-time selection is hundreds of paths and does not
+    belong in a URL. Resolved through the same `cover_art.resolve` the create uses,
+    so the preview cannot promise a card that creating it would then refuse.
+    """
+    if store.get_print_project(token) is None:
+        abort(404)
+    try:
+        paths = json.loads(request.form.get("selected_paths_json", "[]"))
+    except ValueError:
+        paths = []
+    if not isinstance(paths, list) or not paths:
+        abort(404)
+    cover = cover_art.resolve(MEDIA_DIR, [str(path) for path in paths])
+    if cover is None:
+        abort(404)
+    data, content_type = cover
+    return Response(data, mimetype=content_type)
 
 
 # --------------------------------------------------------------------------
@@ -586,14 +1011,16 @@ def media_overview():
     devices_by_id = store.list_devices()
     rows = [
         (
+            store_lib.split_card_key(key, c),
             c,
             sum(f["size"] for f in c.get("files", [])),
             devices_by_id.get(c["esp_id"], {}).get("alias") or c["esp_id"],
         )
-        for c in cards_by_key.values()
+        for key, c in cards_by_key.items()
         if c["kind"] == "files" and c.get("files")
     ]
-    rows.sort(key=lambda row: row[1], reverse=True)
+    # row[0] is the identity, row[1] the record, row[2] the total size.
+    rows.sort(key=lambda row: row[2], reverse=True)
     return render_template("media.html", rows=rows)
 
 
@@ -677,6 +1104,13 @@ def remove_password():
 # --------------------------------------------------------------------------
 @app.route("/<esp_id>/card/<card_id>/manifest.json")
 def card_manifest(esp_id, card_id):
+    # A card the hub ordered printed has no UID yet and is keyed by a hub token
+    # instead, which no device ever sends. Answering such a request would hand out
+    # a manifest whose cardId is that token, and registering it would invent a
+    # device/card pair nothing can ever tap.
+    if not manifest_lib.is_valid_card_id(card_id):
+        return jsonify(error="unknown_card", status="pending"), 404
+
     ts = store_lib.now_iso()
     store.touch_device(esp_id, request.remote_addr, card_id, ts)
 

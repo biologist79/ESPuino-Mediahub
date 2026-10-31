@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} · ESPuino MediaHub{% endblock %}
+
+{% block content %}
+<section class="page-head">
+	<div class="page-head-row">
+		<div>
+			<h1>{{ project.name }}</h1>
+			<p class="muted">{{ _('One order at the card-printing service: open it there to pick the print options and pay. Cards created in this project are registered in the hub and printed there.') }}</p>
+		</div>
+		<div class="page-head-actions">
+			<a class="btn btn-secondary" href="{{ url_for('print_projects') }}">{{ _('All projects') }}</a>
+			<a class="btn" href="{{ url_for('new_print_card', token=token) }}">{{ _('New card') }}</a>
+			<form method="post" action="{{ url_for('sync_print_project', token=token) }}">
+				<button class="btn btn-secondary" type="submit">{{ _('Check order') }}</button>
+			</form>
+			{% if printer_url %}
+				<a class="btn" href="{{ printer_url }}/p/{{ project.prefix }}" target="_blank" rel="noopener">{{ _('Open in the print shop') }}</a>
+			{% endif %}
+			<form method="post" action="{{ url_for('delete_print_project', token=token) }}" class="confirm-form"
+				data-confirm="{{ _('Really delete this print project?') }}">
+				<button class="btn btn-danger" type="submit">{{ _('Delete project') }}</button>
+			</form>
+		</div>
+	</div>
+</section>
+
+<div class="table-wrap">
+	<table>
+		<tbody>
+			<tr>
+				<th>{{ _('Order at the print shop') }}</th>
+				<td>
+					{% if project.status %}
+						<code>{{ project.status }}</code>
+					{% elif not printer_url %}
+						<span class="muted">{{ _('no print shop configured') }}</span>
+					{% else %}
+						<span class="muted">{{ _('not registered yet') }}</span>
+					{% endif %}
+				</td>
+			</tr>
+			{% if project.status_synced_at %}
+			<tr>
+				<th>{{ _('Last checked') }}</th>
+				<td>{{ project.status_synced_at | shortdt }}</td>
+			</tr>
+			{% endif %}
+			<tr>
+				<th>{{ _('Cards') }}</th>
+				<td>{{ card_count }}</td>
+			</tr>
+			<tr>
+				<th>{{ _('Created') }}</th>
+				<td>{{ project.created_at | shortdt }}</td>
+			</tr>
+		</tbody>
+	</table>
+</div>
+
+<p class="muted">{{ _('Each card of this order, per ESPuino. A card appears here as soon as it exists in the hub; it is the real card on the device once it has been printed and the hub has seen that.') }}</p>
+
+{% if not groups %}
+	<p class="empty-state">{{ _('No card in this project yet.') }}</p>
+{% else %}
+	<div class="table-wrap">
+		<table>
+			<thead>
+				<tr>
+					<th>{{ _('Card') }}</th>
+					<th>{{ _('ESPuino') }}</th>
+					<th>{{ _('Name') }}</th>
+					<th>{{ _('Status') }}</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for group in groups %}
+					{% for identity, card, device_label in group.cards %}
+					<tr>
+						{% if loop.first %}
+							<td rowspan="{{ group.cards | length }}">
+								<code>#{{ group.id }}</code>
+								{% if group.promoted_at %}
+									<br><span class="muted">{{ group.cards[0][0] }}</span>
+								{% endif %}
+							</td>
+						{% endif %}
+						<td>{{ device_label }}</td>
+						<td>{{ card.name or "—" }}</td>
+						<td>
+							{% if card.card_id %}
+								<span class="badge badge-ok">{{ _('printed') }}</span>
+							{% else %}
+								<span class="badge badge-attention">{{ _('to print') }}</span>
+							{% endif %}
+						</td>
+						<td class="table-actions">
+							<a class="btn btn-small" href="{{ url_for('assign_card', esp_id=card.esp_id, card_id=identity) }}">
+								{{ _('Assign') if card.status != "assigned" else _('Edit') }}
+							</a>
+						</td>
+					</tr>
+					{% endfor %}
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+{% endif %}
+{% endblock %}

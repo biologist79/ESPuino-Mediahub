@@ -650,6 +650,43 @@ input[type="file"]:focus,
 	padding: 10px;
 }
 
+/* --- Cover preview on the print-card form (static/js/print-card.js) ---
+   `data-state` is set by the script: the image itself once something resolves, and
+   a note otherwise. "none" is the one that stops the card from existing at all, so
+   it is the one styled as something to act on — as plain muted text it reads as a
+   remark, and it was missed exactly that way while testing. */
+.cover-preview img {
+	display: block;
+	max-width: 260px;
+	height: auto;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--surface);
+}
+
+.cover-preview-note {
+	margin: 6px 0 0;
+	font-size: .85rem;
+	color: var(--muted);
+}
+
+.cover-preview[data-state="none"] {
+	padding: 10px 12px;
+	border: 1px solid color-mix(in srgb, #d97706 40%, transparent);
+	border-radius: var(--radius);
+	background: color-mix(in srgb, #d97706 12%, var(--surface));
+}
+
+.cover-preview[data-state="none"] .cover-preview-note {
+	margin: 0;
+	color: #d97706;
+}
+
+.cover-preview[data-state="media"] .cover-preview-note,
+.cover-preview[data-state="upload"] .cover-preview-note {
+	color: #16a34a;
+}
+
 .mt-root, .mt-children {
 	list-style: none;
 	margin: 0;

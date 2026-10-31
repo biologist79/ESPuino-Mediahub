@@ -16,3 +16,6 @@ __pycache__/
 # Compiled translation catalogs — generated at Docker build time (or via
 # `pybabel compile -d translations` for local dev), not committed.
 translations/**/*.mo
+
+# Nix results file
+/result

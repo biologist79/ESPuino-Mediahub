@@ -117,6 +117,14 @@
 			renderSelectedList();
 			syncCheckboxes();
 			updateFolderWarning(false);
+			// Everything that changes the selection goes through here, which makes it
+			// the one place to tell anyone else about it. The print-card form uses it
+			// to ask the server which cover this selection would print with; polling
+			// the hidden input is not an option, since changing its value in script
+			// fires no event.
+			root.dispatchEvent(new CustomEvent("mh:selection-changed", {
+				detail: {paths: selection.slice(), playRoot: playRootInput ? playRootInput.value : ""}
+			}));
 		}
 
 		function renderSelectedList() {

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Print projects') }} · ESPuino MediaHub{% endblock %}
+
+{% block content %}
+<section class="page-head">
+	<div class="page-head-row">
+		<div>
+			<h1>{{ _('Print projects') }}</h1>
+			<p class="muted">{{ _('One project is one order at the card-printing service. A card created in a project is registered here and printed there — it becomes the real card on the ESPuino once it has been printed.') }}</p>
+		</div>
+		<div class="page-head-actions">
+			<form class="add-card-form" method="post" action="{{ url_for('create_print_project') }}">
+				<input type="text" name="name" placeholder="{{ _('Project name, e.g. Kindergarten 2026') }}" required>
+				<button class="btn" type="submit">{{ _('Create project') }}</button>
+			</form>
+		</div>
+	</div>
+</section>
+
+{% if not projects %}
+	<p class="empty-state">{{ _('No print project yet.') }}</p>
+{% else %}
+	<div class="table-wrap">
+		<table>
+			<thead>
+				<tr>
+					<th>{{ _('Project') }}</th>
+					<th>{{ _('Cards') }}</th>
+					<th>{{ _('Order at the print shop') }}</th>
+					<th>{{ _('Created') }}</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for token, project, card_count in projects %}
+				<tr>
+					<td><a href="{{ url_for('print_project', token=token) }}">{{ project.name }}</a></td>
+					<td>{{ card_count }}</td>
+					<td>
+						{% if project.status %}
+							<code>{{ project.status }}</code>
+						{% else %}
+							<span class="muted">{{ _('not registered yet') }}</span>
+						{% endif %}
+					</td>
+					<td>{{ project.created_at | shortdt }}</td>
+					<td class="table-actions">
+						<a class="btn btn-small" href="{{ url_for('print_project', token=token) }}">{{ _('Open') }}</a>
+					</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+{% endif %}
+{% endblock %}

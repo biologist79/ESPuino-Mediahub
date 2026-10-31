@@ -31,55 +31,10 @@
 		</div>
 	</div>
 
-	<div id="mh-files-section" class="form-section">
-		<div class="form-row">
-			<label for="play_mode">{{ _('Play mode') }}</label>
-			<select id="play_mode" name="play_mode">
-				{% for value, label in play_modes %}
-				<option value="{{ value }}" {{ "selected" if card.play_mode == value }}>{{ _(label) }}</option>
-				{% endfor %}
-			</select>
-		</div>
-
-		<div class="form-row">
-			<div class="form-label-row">
-				<span class="form-label">{{ _('Selected files') }}<span id="selected-count"></span></span>
-				<button type="button" class="btn btn-small btn-secondary" id="clear-selection" hidden>{{ _('Clear selection') }}</button>
-			</div>
-			<ul id="selected-files" class="file-list"></ul>
-			<p class="muted" id="selected-files-empty">{{ _('No files selected yet — browse the library below.') }}</p>
-			<p class="flash flash-error" id="selected-files-warning" hidden></p>
-		</div>
-
-		<div class="form-row">
-			<span class="form-label">{{ _('Media library') }}</span>
-			<p class="muted">{{ _("Files come from the library mounted at /media — MediaHub doesn't store its own copies.") }}</p>
-			<div id="media-tree" class="media-tree"
-				data-list-url="{{ url_for('media_browse') }}"
-				data-recursive-list-url="{{ url_for('media_browse_recursive') }}"></div>
-		</div>
-
-		<input type="hidden" name="selected_paths_json" id="selected-paths-json" value="[]">
-		<input type="hidden" name="play_root" id="play-root" value="{{ card.play_root or '' }}">
-		<script type="application/json" id="media-tree-labels">
-			{{ {
-				"useFolder": _("Use folder"),
-				"emptyFolder": _("No audio files here."),
-				"useFolderSubfoldersOnly": _("This folder has no audio files of its own, only subfolders. This play mode doesn't include them — pick a recursive one for that."),
-				"remove": _("Remove"),
-				"listError": _("Could not list this folder (permission denied?)."),
-				"singleFileModes": single_file_play_modes,
-				"singleFileOnly": _("This play mode only supports one file — pick a different mode to select more."),
-				"recursivePlayModes": recursive_play_modes,
-				"recursiveHint": _("Includes subfolders too (recursive play mode; depth configurable in Settings)."),
-				"gatherRecursiveModes": gather_recursive_play_modes,
-				"singleFolderModes": single_folder_play_modes,
-				"singleFolderBlocked": _("This play mode plays a single folder, so files from another one can't be added. Pick a recursive play mode to combine folders."),
-				"singleFolderConflict": _("The selected files lie in several folders, but this play mode plays only one — the ESPuino would find nothing to play. Pick a recursive play mode, or keep files from a single folder."),
-				"initialSelection": card.files | map(attribute='path') | list
-			} | tojson }}
-		</script>
-	</div>
+	{% set selected_play_mode = card.play_mode %}
+	{% set selected_play_root = card.play_root %}
+	{% set initial_selection = card.files | map(attribute='path') | list %}
+	{% include "_media_picker.html" %}
 
 	<div id="mh-webradio-section" class="form-section">
 		<div class="form-row">

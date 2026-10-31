@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('New card') }} · {{ project.name }} · ESPuino MediaHub{% endblock %}
+
+{% block content %}
+<section class="page-head">
+	<div class="page-head-row">
+		<div>
+			<h1>{{ _('New card') }}</h1>
+			<p class="muted">{{ _('Project: %(name)s', name=project.name) }}</p>
+			<p class="muted">{{ _('This card is printed for you: its content is what it plays, and its cover is taken from that media unless you upload one here. Both are created in one go — the card at the print shop, and its assignment here.') }}</p>
+		</div>
+		<div class="page-head-actions">
+			<a class="btn btn-secondary" href="{{ url_for('print_project', token=token) }}">{{ _('Back to the project') }}</a>
+		</div>
+	</div>
+</section>
+
+<form class="form-card" method="post" enctype="multipart/form-data">
+	<div class="form-row">
+		<label for="name">{{ _('Name') }} <span class="muted">{{ _('(used for the card at the print shop; display only here)') }}</span></label>
+		<input type="text" id="name" name="name" value="{{ initial_name }}" placeholder="{{ _('e.g. Bedtime Stories – Episode 12') }}">
+	</div>
+
+	<div class="form-row">
+		<span class="form-label">{{ _('Content type') }}</span>
+		<div class="radio-group">
+			<label class="radio-option">
+				<input type="radio" name="kind" value="files" {{ "checked" if initial_kind != "webradio" }} onchange="mhToggleKind()">
+				{{ _('Audio files') }}
+			</label>
+			<label class="radio-option">
+				<input type="radio" name="kind" value="webradio" {{ "checked" if initial_kind == "webradio" }} onchange="mhToggleKind()">
+				{{ _('Webradio') }}
+			</label>
+		</div>
+		<p class="muted">{{ _('A webradio card has no media to take a cover from, so it needs an uploaded one.') }}</p>
+	</div>
+
+	{% include "_media_picker.html" %}
+
+	<div id="mh-webradio-section" class="form-section">
+		<div class="form-row">
+			<label for="stream_url">{{ _('Stream URL') }}</label>
+			<input type="url" id="stream_url" name="stream_url" value="{{ initial_stream_url }}" placeholder="http://radio.example/stream.mp3">
+		</div>
+	</div>
+
+	<div class="form-row">
+		<span class="form-label">{{ _('Cover') }}</span>
+		<p class="muted">{{ _('The image the card is printed with. Without an upload it comes from the media: an image beside the files (cover.jpg, folder.png, …) or the artwork inside one of them.') }}</p>
+		<input type="file" id="cover" name="cover" accept="image/png,image/jpeg,image/webp,image/gif">
+		<div id="cover-preview" class="cover-preview" data-state="empty"
+			data-cover-url="{{ url_for('print_card_cover', token=token) }}"
+			data-empty="{{ _('Select files to see the cover they would be printed with.') }}"
+			data-none="{{ _('No cover found for this selection — upload an image.') }}"
+			data-upload="{{ _('This uploaded image will be the cover.') }}"
+			data-media="{{ _('Cover taken from the media.') }}">
+			<p class="cover-preview-note">{{ _('Select files to see the cover they would be printed with.') }}</p>
+		</div>
+	</div>
+
+	<div class="form-row">
+		<span class="form-label">{{ _('ESPuinos this card should work on') }}</span>
+		<p class="muted">{{ _('Each ticked device gets the same card as its own assignment, with its own play position and cache.') }}</p>
+		{% if devices %}
+		<div class="checkbox-group">
+			{% for esp_id, dev in devices.items() %}
+			<label class="checkbox-option">
+				<input type="checkbox" name="esp_ids" value="{{ esp_id }}"
+					{{ "checked" if esp_id in selected_esp_ids or (not selected_esp_ids and loop.first) }}>
+				<span>{{ dev.alias or esp_id }}</span>
+			</label>
+			{% endfor %}
+		</div>
+		{% else %}
+		<p class="empty-state">{{ _('No ESPuino has checked in yet — a device has to contact the hub at least once before a card can be written for it.') }}</p>
+		{% endif %}
+	</div>
+
+	<div class="form-actions">
+		<button class="btn" type="submit">{{ _('Create card') }}</button>
+		<a class="btn btn-secondary" href="{{ url_for('print_project', token=token) }}">{{ _('Cancel') }}</a>
+	</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+	function mhToggleKind() {
+		var isWebradio = document.querySelector('input[name="kind"]:checked').value === "webradio";
+		document.getElementById("mh-files-section").style.display = isWebradio ? "none" : "block";
+		document.getElementById("mh-webradio-section").style.display = isWebradio ? "block" : "none";
+	}
+	mhToggleKind();
+</script>
+<script src="{{ url_for('static', filename='js/media-browser.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/print-card.js') }}" defer></script>
+{% endblock %}

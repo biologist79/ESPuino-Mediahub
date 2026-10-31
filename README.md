@@ -55,6 +55,17 @@ pip install -r requirements.txt
 python app.py        # http://localhost:8080
 ```
 
+Or straight from the flake, without installing anything:
+
+```bash
+MEDIAHUB_DATA=$HOME/mediahub-data MEDIAHUB_MEDIA=$HOME/audiobooks nix run .
+# http://localhost:8000  (gunicorn's own default; the image passes --bind 0.0.0.0:8080)
+```
+
+Both paths have to be **absolute**: the wrapped gunicorn starts with `--chdir` into
+the read-only store path it was built into, so a relative `./data` would be looked
+for there.
+
 ## Updating
 
 ```bash
@@ -95,6 +106,7 @@ compose up -d` takes over from `--build` and nothing else changes.
 - **Cards & Assignments** (`/cards`): overview, assign/edit — pick files/folders from the mounted library via an inline tree browser (`static/js/media-browser.js`, modeled after the ESPuino web UI's own SD explorer) or set a webradio stream URL — force refresh (per card/all), delete.
 - **One card on several ESPuinos**: the assignment form lists the other known devices as tick boxes and writes the same content to each ticked one as its own independent assignment (own play position, own cache). Devices that already carry the card are pre-ticked so an edit doesn't let siblings drift apart. Unticking never deletes — that stays the explicit Delete button, because a delete may call `DELETE /rfid` on the device.
 - **New Cards**: filter at `/cards?pending=1` — cards registered on tap but not yet assigned (see concept §5.3). The card list and the dashboard refresh themselves: `static/js/live-cards.js` polls `GET /cards/state` every five seconds and reloads when the hub's card set changed, so a card tapped on an ESPuino appears without pressing F5. Polling rather than a server push is deliberate — Gunicorn runs two sync workers, and a held-open SSE stream per browser tab would starve the ESPuino-facing API. While a card ID is being typed or the duplicate dialog is open, a small banner offers the refresh instead of yanking the page away.
+- **Print projects** (`/print`): one project is one order at the card-printing service, and every card created in the project is placed there with its cover (the media's own artwork, or an upload) and the assignment as a markdown track list — the play mode and one bullet per track — as the card's back text, without picking a back side. The print options, the ribbon, the back side and the payment are that service's own page, and `Check order` re-reads the order's status.
 - **Media** (`/media`): storage usage per card; `/media/browse?path=` is the JSON API backing the tree browser.
 - **Settings** (`/settings`): delete behavior lazy vs. secure (concept §13.1) — secure calls `DELETE /rfid` on the ESPuino and only removes the hub entry after a confirmed 200 response. Recursion depth for "use folder". Which devices an assignment pre-selects (only the one being edited, or all known ESPuinos) — a pre-selection only, never what gets written. Also: set/remove the optional hub password.
 - **MediaHub API**: `GET /<espId>/card/<cardId>/manifest.json` (manifest, or `pending` registration), `GET /media/<path>` (media files, path relative to the library root).

@@ -18,13 +18,28 @@ the feature: kids swap cards between devices), and each device gets its
 own independent assignment. This also makes secure delete unambiguous:
 an assignment already knows exactly which one ESPuino to call, no more
 guessing from whichever device last happened to tap the card.
+
+The second half of that key is a card's *identity*, and it is not always a card
+id: a card the hub has ordered printed has no 12-digit UID yet, so it is keyed by
+a hub-generated ``pending-<token>`` string instead, and its ``card_id`` stays empty
+until the print process reports the UID (``register_print_card`` raises one,
+``promote_print_card`` turns it into the real card once it is printed). Anything
+that assumes a UID — the ESPuino-facing manifest route, the secure-delete callback
+— has to refuse every other identity; ``manifest.is_valid_card_id()`` is that
+definition.
 """
 
 import fcntl
 import json
 import os
 import threading
+import uuid
 from datetime import datetime, timezone
+
+# The one definition of "this is a real card id" — the firmware's 12-digit UID
+# form. A card's identity (see the module docstring) is not always one, and the
+# difference decides whether it belongs in a record's `card_id`.
+from manifest import is_valid_card_id
 
 _lock = threading.Lock()
 
@@ -43,6 +58,11 @@ _DEFAULT_DB = {
     },
     "devices": {},
     "cards": {},
+    # Print projects: one order at the card-printing service, which the hub creates
+    # the cards for. Keyed by the hub's own token — the same token its cards carry
+    # — because the shop's prefix uuid is that order's only credential and must
+    # never turn into a hub URL or a store key.
+    "print_projects": {},
 }
 
 
@@ -50,8 +70,35 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _card_key(esp_id, card_id):
-    return f"{esp_id}/{card_id}"
+def _card_key(esp_id, identity):
+    """The store key of one card: its device plus its *identity*.
+
+    The identity is the card's 12-digit UID once a device has reported it, and a
+    hub-generated ``pending-<token>`` while the card is still being printed (see
+    the module docstring).
+    """
+    return f"{esp_id}/{identity}"
+
+
+def print_card_identity():
+    """A fresh identity for a card that has no UID yet (see the module docstring).
+
+    Minted outside the store's lock: two admins submitting at the same moment get
+    different identities by construction, and a collision would need the same four
+    random bytes twice.
+    """
+    return f"pending-{os.urandom(4).hex()}"
+
+
+def split_card_key(key, card):
+    """The identity half of a store key, for a record read out of ``cards``.
+
+    Derived from the key rather than stored on the record: two places holding the
+    same fact could disagree, and the key is what the URL space and the
+    ESPuino-facing routes actually use.
+    """
+    prefix = f"{card['esp_id']}/"
+    return key[len(prefix):] if key.startswith(prefix) else key
 
 
 class Store:
@@ -62,19 +109,21 @@ class Store:
         try:
             os.makedirs(data_dir, exist_ok=True)
             self._ensure_db()
-        except PermissionError as exc:
-            # The one setup mistake that costs people the most time: Docker
-            # creates a missing bind-mount path as root, while the service runs
-            # as another uid. Without this, every worker dies inside
-            # _ensure_db() with a bare traceback and the container
-            # restart-loops, with nothing in the log that names the cause.
-            # entrypoint.sh catches it before Python even starts; this covers a
-            # run without the entrypoint, and a directory that stops being
-            # writable later on.
+        except OSError as exc:
+            # The two setup mistakes that cost people the most time, and both look
+            # the same from inside a worker: Docker creates a missing bind-mount
+            # path as root while the service runs as another uid, and a *relative*
+            # path is resolved against the working directory — which for the
+            # packaged app is the read-only store path gunicorn chdir'd into.
+            # Without this, every worker dies inside _ensure_db() with a bare
+            # traceback and the container restart-loops, with nothing in the log
+            # that names the cause. entrypoint.sh catches it before Python even
+            # starts; this covers a run without the entrypoint, and a directory
+            # that stops being writable later on.
             raise RuntimeError(
                 f"cannot write to the data directory {data_dir!r} as uid {os.geteuid()} "
-                f"({exc.strerror}) - on the host: "
-                f"chown -R {os.geteuid()}:{os.getegid()} <that directory>"
+                f"({exc.strerror}) - it has to be an absolute path this user owns "
+                f"(on the host: chown -R {os.geteuid()}:{os.getegid()} <that directory>)"
             ) from exc
 
     def _ensure_db(self):
@@ -266,8 +315,29 @@ class Store:
 
         return self._mutate(mutate)
 
-    def save_assignment(self, esp_id, card_id, name, kind, play_mode, stream_url, files, play_root=""):
-        """`play_root` is the folder the admin based the selection on, if they
+    def save_assignment(
+        self,
+        esp_id,
+        card_id,
+        name,
+        kind,
+        play_mode,
+        stream_url,
+        files,
+        play_root="",
+        print_ref=None,
+    ):
+        """`card_id` is the card's *identity*: its 12-digit UID for a card a
+        device has reported, or the hub token of a card that has none yet. The
+        caller passes back whatever it was handed — a device-reported id, or the
+        key the admin UI was working on.
+
+        `print_ref` is the print order the card belongs to, when the hub ordered it
+        printed; `promote_print_card` later finds the card by it. It is carried to
+        every device the card is written to, and kept after promotion as
+        provenance.
+
+        `play_root` is the folder the admin based the selection on, if they
         used "use folder" rather than ticking files by hand.
 
         The ESPuino is handed a folder, not a file list, and without this it
@@ -286,13 +356,18 @@ class Store:
                 key,
                 {
                     "esp_id": esp_id,
-                    "card_id": card_id,
+                    # The identity (the key suffix) is the 12-digit UID of a card a
+                    # device reported, and a hub token for one that has no UID yet.
+                    # Only the former belongs in `card_id`.
+                    "card_id": card_id if is_valid_card_id(card_id) else None,
                     "status": "pending",
                     "force_epoch": 0,
                     "first_seen": ts,
                     "last_seen": ts,
                 },
             )
+            if print_ref:
+                card.setdefault("print", dict(print_ref))
             card["status"] = "assigned"
             card["name"] = name
             card["kind"] = kind
@@ -330,6 +405,206 @@ class Store:
             return data["cards"].pop(_card_key(esp_id, card_id), None)
 
         return self._mutate(mutate)
+
+    # -- cards ordered from the print shop (no UID yet) ------------------
+    def register_print_card(self, esp_id, identity, print_ref, ts):
+        """Registers a card the hub is having printed, on one device.
+
+        It has no UID yet, so it is keyed by `identity` — always a hub-generated
+        `pending-<token>`, never a 12-digit number — and its `card_id` stays empty
+        until the print process reports the UID. Call it once per device that
+        should carry the card; the card is then 'pending' and assignable exactly
+        like a tapped one.
+
+        `print_ref` names the shop card it will become — {"token", "prefix", "id",
+        "ribbon"}. The prefix uuid is the shop's own credential for that order, so
+        it is stored data only: never a URL, never a store key.
+        """
+
+        def mutate(data):
+            key = _card_key(esp_id, identity)
+            card = data["cards"].get(key)
+            if card is not None:
+                card["last_seen"] = ts
+                return card
+            card = {
+                "esp_id": esp_id,
+                "card_id": None,
+                "status": "pending",
+                "name": "",
+                "kind": "files",
+                "play_mode": None,
+                "stream_url": None,
+                "files": [],
+                "force_epoch": 0,
+                "print": dict(print_ref),
+                "first_seen": ts,
+                "last_seen": ts,
+                "created_at": ts,
+                "updated_at": ts,
+            }
+            data["cards"][key] = card
+            return card
+
+        return self._mutate(mutate)
+
+    def promote_print_card(self, print_ref, card_id, ts):
+        """Turns the virtual cards of one printed shop card into the real card.
+
+        Called once the print process reports the 12-digit UID `card_id` for the
+        shop card `print_ref` names {"token", "id"}: every record carrying that
+        reference is re-keyed from `esp/<pending-token>` to `esp/<card_id>` with
+        its `card_id` filled in, so the assignment made before printing is live the
+        moment the card is tapped. Returns how many records changed — 0 for a job
+        whose cards are already promoted, which is what makes a retried sync
+        harmless.
+
+        A device may already carry a record under the UID, because the card was
+        tapped before this ran and a tap registers a pending record of its own.
+        That record wins: it is what the device itself reported and the device may
+        already be playing it. The virtual card's assignment is taken over only
+        while the device's own record has none, and the print reference stays on
+        whichever record survives, so a finished order remains traceable.
+        """
+
+        def mutate(data):
+            token = print_ref.get("token")
+            shop_card_id = print_ref.get("id")
+            if not token or shop_card_id is None:
+                return 0
+            cards = data["cards"]
+            virtual = [
+                key
+                for key, card in cards.items()
+                if card.get("card_id") is None
+                and (card.get("print") or {}).get("token") == token
+                and (card.get("print") or {}).get("id") == shop_card_id
+            ]
+            for key in virtual:
+                card = cards[key]
+                target_key = _card_key(card["esp_id"], card_id)
+                if target_key != key:
+                    existing = cards.get(target_key)
+                    if existing is None:
+                        del cards[key]
+                        cards[target_key] = card
+                    else:
+                        if existing.get("status") != "assigned" and card.get("status") == "assigned":
+                            for field in ("name", "kind", "play_mode", "stream_url", "files", "play_root", "status"):
+                                existing[field] = card.get(field)
+                        existing["print"] = card.get("print")
+                        if card.get("first_seen"):
+                            first_seen = existing.get("first_seen")
+                            existing["first_seen"] = (
+                                min(first_seen, card["first_seen"]) if first_seen else card["first_seen"]
+                            )
+                        del cards[key]
+                card["card_id"] = card_id
+                card.setdefault("print", dict(print_ref))["promoted_at"] = ts
+                card["updated_at"] = ts
+            return len(virtual)
+
+        return self._mutate(mutate)
+
+    # -- print projects --------------------------------------------------
+    def list_print_projects(self):
+        return self._read().get("print_projects", {})
+
+    def get_print_project(self, token):
+        return self._read().get("print_projects", {}).get(token)
+
+    def create_print_project(self, name):
+        """Creates a print project: one order at the card-printing service.
+
+        `name` is the admin's own label — an order has no name at the shop. Returns
+        the record with its `token`, which is what everything outside the store
+        addresses the project by.
+
+        The shop's prefix uuid is minted here rather than read back from the shop,
+        so that creating the order there is idempotent (`PUT /api/prefixes/<uuid>`
+        answers "already exists" instead of making a second order on a retry). Until
+        the shop has been asked about it, `status` is null and the project is not
+        known to be an order yet.
+        """
+
+        def mutate(data):
+            projects = data.setdefault("print_projects", {})
+            token = os.urandom(4).hex()
+            while token in projects:
+                token = os.urandom(4).hex()
+            project = {
+                "name": name,
+                "prefix": str(uuid.uuid4()),
+                "status": None,  # the shop's own status, once synced
+                "status_synced_at": None,
+                # The shop card id this order's next card gets. The hub picks it so
+                # that creating a card is idempotent too: it PUTs at a known id, and
+                # a retry lands on the same card instead of a second one.
+                "next_shop_card_id": 1,
+                "created_at": now_iso(),
+            }
+            projects[token] = project
+            return {"token": token, **project}
+
+        return self._mutate(mutate)
+
+    def delete_print_project(self, token):
+        """Removes a print project. Never cascades: the project's cards are live
+        cards at the shop — the customer may already have paid for them — so they
+        are the admin's to delete one by one, in the UI that shows them.
+
+        Returns the record, or None when it was not there.
+        """
+
+        def mutate(data):
+            return data.setdefault("print_projects", {}).pop(token, None)
+
+        return self._mutate(mutate)
+
+    def allocate_shop_card_id(self, token):
+        """The shop card id the next card of this project gets, counting it up.
+
+        The hub picks these ids because the service's PUT is idempotent: a card
+        whose write failed halfway can be written again at the same id, instead of
+        leaving a second card behind for the same hub card. Returns None when the
+        project is gone.
+        """
+
+        def mutate(data):
+            project = data.setdefault("print_projects", {}).get(token)
+            if project is None:
+                return None
+            shop_card_id = project.get("next_shop_card_id", 1)
+            project["next_shop_card_id"] = shop_card_id + 1
+            return shop_card_id
+
+        return self._mutate(mutate)
+
+    def set_print_project_status(self, token, status):
+        """Remembers the shop's own status for this project's order, as of now.
+
+        `status` is the service's vocabulary (draft, payment_pending, paid, queued,
+        printing, printed, cancelled) and is passed through as-is: it is that
+        service's state, not a hub state, so the hub never maps or interprets it.
+        """
+
+        def mutate(data):
+            project = data.setdefault("print_projects", {}).get(token)
+            if project is not None:
+                project["status"] = status
+                project["status_synced_at"] = now_iso()
+            return project
+
+        return self._mutate(mutate)
+
+    def count_cards_for_print_project(self, token):
+        """How many cards (per device) this project has raised."""
+
+        return sum(
+            1
+            for card in self._read()["cards"].values()
+            if (card.get("print") or {}).get("token") == token
+        )
 
     # -- settings ----------------------------------------------------
     def get_settings(self):

@@ -19,6 +19,7 @@
 				<a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' }}">{{ _('Overview') }}</a>
 				<a href="{{ url_for('devices') }}" class="{{ 'active' if request.endpoint == 'devices' }}">{{ _('Devices') }}</a>
 				<a href="{{ url_for('cards') }}" class="{{ 'active' if request.endpoint in ('cards', 'assign_card') }}">{{ _('Cards') }}</a>
+				<a href="{{ url_for('print_projects') }}" class="{{ 'active' if request.endpoint in ('print_projects', 'print_project') }}">{{ _('Print projects') }}</a>
 				<a href="{{ url_for('media_overview') }}" class="{{ 'active' if request.endpoint == 'media_overview' }}">{{ _('Media') }}</a>
 				<a href="{{ url_for('settings') }}" class="{{ 'active' if request.endpoint == 'settings' }}">{{ _('Settings') }}</a>
 			</nav>

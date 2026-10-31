@@ -28,6 +28,13 @@
 		<span class="badge{{ ' badge-attention' if pending_count }}">{{ _('%(num)s pending', num=pending_count) }}</span>
 	</a>
 
+	<a class="card" href="{{ url_for('print_projects') }}">
+		<div class="card-icon">🖨️</div>
+		<h2>{{ _('Print projects') }}</h2>
+		<p>{{ _('Orders at the card-printing service — create a card, and it is printed for you.') }}</p>
+		<span class="badge">{{ print_project_label }}</span>
+	</a>
+
 	<a class="card" href="{{ url_for('media_overview') }}">
 		<div class="card-icon">📁</div>
 		<h2>{{ _('Media') }}</h2>

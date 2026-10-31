@@ -24,14 +24,20 @@
 				</tr>
 			</thead>
 			<tbody>
-				{% for card, total_size, device_label in rows %}
+				{% for identity, card, total_size, device_label in rows %}
 				<tr>
-					<td><code>{{ card.card_id }}</code></td>
+					<td>
+						{% if card.card_id %}
+							<code>{{ card.card_id }}</code>
+						{% else %}
+							<span class="badge badge-attention">{{ _('to print') }}</span>
+						{% endif %}
+					</td>
 					<td>{{ device_label }}</td>
 					<td>{{ card.name or "—" }}</td>
 					<td>{{ card.files | length }}</td>
 					<td>{{ (total_size / 1048576) | round(1) }}&nbsp;MB</td>
-					<td><a class="btn btn-small" href="{{ url_for('assign_card', esp_id=card.esp_id, card_id=card.card_id) }}">{{ _('Manage') }}</a></td>
+					<td><a class="btn btn-small" href="{{ url_for('assign_card', esp_id=card.esp_id, card_id=identity) }}">{{ _('Manage') }}</a></td>
 				</tr>
 				{% endfor %}
 			</tbody>

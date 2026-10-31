@@ -20,6 +20,10 @@ services:
     environment:
       - MEDIAHUB_DATA=/data
       - MEDIAHUB_MEDIA=/media
+      # Print shop (optional): the hub's print projects become orders there. Set
+      # MEDIAHUB_PRINTER_URL in .env; see env-example for what the URL has to be
+      # reachable from.
+      - MEDIAHUB_PRINTER_URL=${MEDIAHUB_PRINTER_URL:-}
       # The service runs as www-data (33:33) by default, not as root: the
       # container starts as root only so entrypoint.sh can hand /data to this
       # uid/gid, and then steps down to it. So there is no chown to do by hand.
